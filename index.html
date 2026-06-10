@@ -889,17 +889,69 @@ function exportCSV(){
 // ═══════════════════════════════════
 // DROP
 // ═══════════════════════════════════
-async function buildDrop(){
+// Plantillas de llaves según las planillas oficiales del club.
+// Cada plantilla es el orden de las posiciones de arriba hacia abajo del
+// cuadro (tamaño = potencia de 2). Token "-" = bye (lugar vacío).
+// Etiquetas: <puesto><zona>, ej: 1A = 1° de zona A, 3B = 3° de zona B.
+// Las zonas de 4 aportan 1°,2°,3°; las de 3 aportan 1°,2°.
+const DROP_TEMPLATES={
+  6:"1A 2B 2A 1B",
+  7:"1A - 3A 2B 2A - 1B -",
+  8:"1A - 3A 2B 2A 3B 1B -",
+  9:"1A - 2B 2C 1C 2A 1B -",
+  10:"1A - 2B 2C 1C 2A 3A 1B",
+  11:"1A 3B 2B 2C 1C 2A 3A 1B",
+  12:"1A 2B 2C 1D 1C 2D 2A 1B",
+  13:"1A - 3A 2B 2C - 1D - 1C - 2D - 2A - 1B -",
+  14:"1A - 3A 2B 2C - 1D - 1C - 2D - 2A 3B 1B -",
+  15:"1A - 2B 2C 1E - 1D - 1C - 2E - 2D 2A 1B -",
+  16:"1A - 2B 2C 1E - 1D - 1C - 3A 2E 2D 2A 1B -"
+};
+function dropFmtLabel(s){return(s&&s!=='-')?`${s[0]}° ${s.slice(1)}`:''}
+function buildDropFromTemplate(tokens,map){
+  const size=tokens.length;
+  const first=[];
+  for(let i=0;i<size;i+=2){
+    let la=tokens[i],lb=tokens[i+1];
+    let a=(la&&la!=='-')?map[la]:null,b=(lb&&lb!=='-')?map[lb]:null;
+    let labA=dropFmtLabel(la),labB=dropFmtLabel(lb);
+    if(!a&&b){a=b;b=null;labA=labB;labB=''}      // bye: la pareja presente va a teamA
+    const bye=!!(a&&!b);
+    first.push({id:uid(),teamA:a||null,labelA:labA,teamB:b||null,labelB:labB,sets:[],winner:bye?a.id:null,status:bye?'done':'pending',schedule:null,isBye:bye});
+  }
+  const rounds=[{name:roundName(size/2),matches:first}];
+  let cur=size/2;while(cur>1){cur/=2;const em=[];for(let i=0;i<cur;i++)em.push({id:uid(),teamA:null,teamB:null,labelA:'',labelB:'',sets:[],winner:null,status:'pending',schedule:null,isBye:false});rounds.push({name:roundName(cur),matches:em})}
+  propByes(rounds);
+  return rounds;
+}
+function buildDropGeneric(){
   const byPos=[];
   for(let p=0;p<3;p++)S.zones.forEach(z=>{if(z.qualified[p])byPos.push({pair:z.qualified[p],label:`${p+1}° ${z.letter}`})});
-  if(byPos.length<2){toast('Sin clasificados suficientes');return}
+  if(byPos.length<2)return null;
   let size=1;while(size<byPos.length)size*=2;
   const seeds=seededBracket(byPos,size);
   const first=[];
   for(let i=0;i<size;i+=2){const a=seeds[i],b=seeds[i+1],bye=!b;first.push({id:uid(),teamA:a?.pair||null,labelA:a?.label||'',teamB:b?.pair||null,labelB:b?.label||'',sets:[],winner:bye&&a?a.pair.id:null,status:bye?'done':'pending',schedule:null,isBye:bye})}
   const rounds=[{name:roundName(size/2),matches:first}];
   let cur=size/2;while(cur>1){cur/=2;const em=[];for(let i=0;i<cur;i++)em.push({id:uid(),teamA:null,teamB:null,labelA:'',labelB:'',sets:[],winner:null,status:'pending',schedule:null,isBye:false});rounds.push({name:roundName(cur),matches:em})}
-  propByes(rounds);S.bracket=rounds;S.bracketBuilt=true;await save();
+  propByes(rounds);
+  return rounds;
+}
+async function buildDrop(){
+  const map={};
+  S.zones.forEach(z=>{(z.qualified||[]).forEach((pair,i)=>{map[`${i+1}${z.letter}`]=pair})});
+  const N=S.pairs.length;
+  const tpl=DROP_TEMPLATES[N];
+  let rounds=null;
+  if(tpl){
+    const tokens=tpl.trim().split(/\s+/);
+    const missing=tokens.filter(t=>t!=='-'&&!map[t]);
+    rounds=missing.length?buildDropGeneric():buildDropFromTemplate(tokens,map);
+  }else{
+    rounds=buildDropGeneric();
+  }
+  if(!rounds||!rounds.length){toast('Sin clasificados suficientes');return}
+  S.bracket=rounds;S.bracketBuilt=true;await save();
   enableSTab('bracket');enablePTab('bracket');showSTab('bracket');toast('¡Drop generado!');
 }
 function seededBracket(cl,size){const s=new Array(size).fill(null);const p=bPos(size);cl.forEach((c,i)=>{if(p[i]!==undefined)s[p[i]]=c});return s}
