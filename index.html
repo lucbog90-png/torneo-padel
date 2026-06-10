@@ -905,7 +905,15 @@ const DROP_TEMPLATES={
   13:"1A - 3A 2B 2C - 1D - 1C - 2D - 2A - 1B -",
   14:"1A - 3A 2B 2C - 1D - 1C - 2D - 2A 3B 1B -",
   15:"1A - 2B 2C 1E - 1D - 1C - 2E - 2D 2A 1B -",
-  16:"1A - 2B 2C 1E - 1D - 1C - 3A 2E 2D 2A 1B -"
+  16:"1A - 2B 2C 1E - 1D - 1C - 3A 2E 2D 2A 1B -",
+  17:"1A - 2B 2C 1E 3B 1D - 1C - 3A 2E 2D 2A 1B -",
+  18:"1A - 2C 2F 1E 2B 1D - 1C - 2A 1F 2E 2D 1B -",
+  19:"1A - 2C 2F 1E 2B 3A 1D 1C - 2A 1F 2E 2D 1B -",
+  20:"1A - 2C 2F 1E 2B 3A 1D 1C 3B 2A 1F 2E 2D 1B -",
+  21:"1A - 2F 2G 1E 2C 2B 1D 1C 2A 2D 1F 1G 2E 1B -",
+  22:"1A - 2F 2G 1E 2C 2B 1D 1C 2A 2D 1F 1G 2E 3A 1B",
+  23:"1A 3B 2F 2G 1E 2C 2B 1D 1C 2A 2D 1F 1G 2E 3A 1B",
+  24:"1A 2B 2G 1H 1E 2F 2C 1D 1C 2D 2E 1F 1G 2H 2A 1B"
 };
 function dropFmtLabel(s){return(s&&s!=='-')?`${s[0]}° ${s.slice(1)}`:''}
 function buildDropFromTemplate(tokens,map){
