@@ -748,8 +748,9 @@ function recalcZone(z){
   z.standings=Object.values(st).sort((a,b)=>b.wins!==a.wins?b.wins-a.wins:tb(a,b));
   // La zona se cierra cuando TODOS sus partidos están jugados
   z.closed=z.matches.length>0&&z.matches.every(m=>m.status==='done');
-  // Clasifican los 3 primeros de la tabla (queda eliminado el último en zonas de 4)
-  z.qualified=z.closed?z.standings.slice(0,3).map(s=>s.pair):[];
+  // Clasifican: en zona de 3 -> 2 parejas; en zona de 4 -> 3 parejas
+  const cupos=z.size===4?3:2;
+  z.qualified=z.closed?z.standings.slice(0,cupos).map(s=>s.pair):[];
 }
 
 // ═══════════════════════════════════
@@ -772,7 +773,7 @@ function matchRowHTML(m){
       </div></div>`;
   }
   const aW=m.winner===m.teamA.id,bW=m.winner===m.teamB.id;
-  const sch=m.schedule?`<div class="sch-chip"><span class="t">📅 ${esc(m.schedule.time)}</span><span class="c">🏟️ ${esc(m.schedule.court)}</span></div>`:'';
+  const sch=m.schedule?`<div class="sch-chip">${m.schedule.day?`<span class="t">📆 ${esc(m.schedule.day)}</span>`:''}${m.schedule.time?`<span class="t">🕐 ${esc(m.schedule.time)}</span>`:''}${m.schedule.court?`<span class="c">🏟️ ${esc(m.schedule.court)}</span>`:''}</div>`:'';
   const scoreTxt=m.status==='done'?(m.sets.length?m.sets.map(s=>`${s.a}-${s.b}`).join(' '):'W.O.'):'vs';
   return`<div class="zone-match-row"><div class="zone-match-label">${esc(m.label)}</div>
     <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
@@ -800,8 +801,9 @@ function renderZonas(){
 function renderZoneCard(z){
   const posClass=['pos-gold','pos-silver','pos-bronze',''];
   const dif=s=>{const d=s.sw-s.sl;return(d>0?'+':'')+d};
+  const cupos=z.size===4?3:2;
   const stRows=z.standings.length
-    ?z.standings.map((s,i)=>`<tr class="${i<3&&z.closed?'row-qual':''}"><td class="${posClass[i]||''}">${['🥇','🥈','🥉','4°'][i]||i+1}</td><td style="font-weight:600;font-size:13px">${esc(s.pair.a)}<br><span style="color:var(--text2);font-size:11px">${esc(s.pair.b)}</span></td><td>${s.wins}</td><td style="font-size:11px;color:var(--text2)">${s.sw}-${s.sl}</td><td style="font-size:12px;font-weight:700;color:${(s.sw-s.sl)>0?'var(--accent)':(s.sw-s.sl)<0?'var(--danger)':'var(--text2)'}">${dif(s)}</td></tr>`).join('')
+    ?z.standings.map((s,i)=>`<tr class="${i<cupos&&z.closed?'row-qual':''}"><td class="${posClass[i]||''}">${['🥇','🥈','🥉','4°'][i]||i+1}</td><td style="font-weight:600;font-size:13px">${esc(s.pair.a)}<br><span style="color:var(--text2);font-size:11px">${esc(s.pair.b)}</span></td><td>${s.wins}</td><td style="font-size:11px;color:var(--text2)">${s.sw}-${s.sl}</td><td style="font-size:12px;font-weight:700;color:${(s.sw-s.sl)>0?'var(--accent)':(s.sw-s.sl)<0?'var(--danger)':'var(--text2)'}">${dif(s)}</td></tr>`).join('')
     :z.pairs.map((p,i)=>`<tr><td style="color:var(--text2)">${i+1}</td><td style="font-weight:600;font-size:13px">${esc(p.a)}<br><span style="color:var(--text2);font-size:11px">${esc(p.b)}</span></td><td>-</td><td>-</td><td>-</td></tr>`).join('');
   const matchRows=z.matches.map(m=>matchRowHTML(m)).join('');
   const qualLine=z.qualified.map((q,i)=>`<span>${['🥇','🥈','🥉'][i]} ${esc(q.a)}</span>`).join(' · ');
@@ -815,7 +817,8 @@ function renderResultados(){
   if(!S.zones.length)return`<div class="empty"><div class="ei">📊</div><p>Sin resultados aún</p></div>`;
   return S.zones.map(z=>{
     const posL=['🥇 1°','🥈 2°','🥉 3°','4°'];
-    const rows=z.standings.map((s,i)=>`<tr class="${i<3&&z.closed?'row-qual':''}"><td style="font-weight:700">${posL[i]||i+1}</td><td style="font-weight:600">${esc(s.pair.a)} / ${esc(s.pair.b)}</td><td>${s.wins}</td><td>${s.losses}</td><td>${s.sw}-${s.sl}</td><td style="font-weight:700;color:${(s.sw-s.sl)>0?'var(--accent)':(s.sw-s.sl)<0?'var(--danger)':'var(--text2)'}">${(s.sw-s.sl)>0?'+':''}${s.sw-s.sl}</td><td>${i<3&&z.closed?'<span class="badge badge-green">Clas.</span>':(z.closed?'<span class="badge badge-red">Elim.</span>':'-')}</td></tr>`).join('');
+    const cupos=z.size===4?3:2;
+    const rows=z.standings.map((s,i)=>`<tr class="${i<cupos&&z.closed?'row-qual':''}"><td style="font-weight:700">${posL[i]||i+1}</td><td style="font-weight:600">${esc(s.pair.a)} / ${esc(s.pair.b)}</td><td>${s.wins}</td><td>${s.losses}</td><td>${s.sw}-${s.sl}</td><td style="font-weight:700;color:${(s.sw-s.sl)>0?'var(--accent)':(s.sw-s.sl)<0?'var(--danger)':'var(--text2)'}">${(s.sw-s.sl)>0?'+':''}${s.sw-s.sl}</td><td>${i<cupos&&z.closed?'<span class="badge badge-green">Clas.</span>':(z.closed?'<span class="badge badge-red">Elim.</span>':'-')}</td></tr>`).join('');
     return`<div class="card"><div class="card-title">📊 ${z.name}</div><table><thead><tr><th>Pos</th><th>Pareja</th><th>G</th><th>P</th><th>Sets</th><th>Dif</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }).join('');
 }
@@ -830,7 +833,7 @@ function renderBracketTab(){
       const mk=(team,label,isW)=>team?`<div class="drop-team ${isW?'winner':''}">${label?`<span class="drop-seed">${esc(label)}</span>`:''}<div class="drop-team-names"><div class="drop-p1">${esc(team.a)}</div><div class="drop-p2">${esc(team.b)}</div></div>${m.sets.length?`<span class="drop-score ${isW?'ws':''}">${m.sets.map(s=>isW===aW?s.a:s.b).join(' ')}</span>`:''}</div>`:`<div class="drop-team empty-team"><span>— Espera —</span></div>`;
       const tA=mk(m.teamA,m.labelA,aW);
       const tB=m.isBye?`<div class="drop-team bye-team"><span>— BYE —</span></div>`:mk(m.teamB,m.labelB,bW);
-      const sch=m.schedule?`<div class="drop-sch"><span class="dt">📅 ${esc(m.schedule.time)}</span><span class="dc">🏟️ ${esc(m.schedule.court)}</span></div>`:'';
+      const sch=m.schedule?`<div class="drop-sch">${m.schedule.day?`<span class="dt">📆 ${esc(m.schedule.day)}</span>`:''}${m.schedule.time?`<span class="dt">🕐 ${esc(m.schedule.time)}</span>`:''}${m.schedule.court?`<span class="dc">🏟️ ${esc(m.schedule.court)}</span>`:''}</div>`:'';
       return`<div class="drop-slot"><div class="drop-match ${m.status==='done'?'match-done':''} ${m.isBye?'match-bye':''}">${tA}${tB}${sch}</div></div>`;
     }).join('');
     return`<div class="drop-round"><div class="drop-round-title">${r.name}</div>${slots}</div>`;
@@ -918,17 +921,21 @@ function renderBracketTabSup(){
     html+=`<div class="card"><div class="card-title">🎯 ${r.name}</div>`;
     html+=r.matches.map(m=>{
       if(m.isBye)return`<div class="pending-match-box">✓ BYE: ${pairName(m.teamA)}</div>`;
-      if(!m.teamA||!m.teamB)return`<div class="pending-match-box">⏳ Esperando ronda anterior</div>`;
-      if(m.status==='done'){const wn=m.winner===m.teamA?.id?pairName(m.teamA):pairName(m.teamB);const chips=m.sets.map(s=>`<span class="set-chip">${s.a}-${s.b}</span>`).join('')||'<span class="set-chip">W.O.</span>';const sch=m.schedule?`<div class="sch-chip" style="margin-top:5px"><span class="t">📅 ${esc(m.schedule.time)}</span><span class="c">🏟️ ${esc(m.schedule.court)}</span></div>`:'';return`<div class="sup-match"><div class="done-result"><span class="badge badge-green">✓</span><div style="display:flex;gap:4px;flex-wrap:wrap">${chips}</div><strong style="color:var(--accent)">${esc(wn)}</strong><button class="btn btn-secondary btn-sm" onclick="reopenBM(${ri},'${m.id}')">✏️</button></div>${sch}</div>`;}
+      if(!m.teamA||!m.teamB){
+        const lbl=`${m.labelA?esc(m.labelA):'Por definir'} vs ${m.labelB?esc(m.labelB):'Por definir'}`;
+        const schp=m.schedule?`<div class="sch-chip" style="margin-bottom:8px">${m.schedule.day?`<span class="t">📆 ${esc(m.schedule.day)}</span>`:''}${m.schedule.time?`<span class="t">🕐 ${esc(m.schedule.time)}</span>`:''}${m.schedule.court?`<span class="c">🏟️ ${esc(m.schedule.court)}</span>`:''}</div>`:'';
+        return`<div class="sup-match"><div class="sup-match-teams" style="color:var(--text2)">${lbl}</div><div style="font-size:11px;color:var(--accent3);margin-bottom:8px">⏳ Las parejas se definen al cerrar la ronda anterior, pero podés dejar el día y horario cargados.</div>${schp}${schForm(m.id,`b${ri}`,m.schedule)}<div><button class="btn btn-secondary btn-sm" onclick="saveBSchedule(${ri},'${m.id}')">🕐 Guardar día y horario</button></div></div>`;
+      }
+      if(m.status==='done'){const wn=m.winner===m.teamA?.id?pairName(m.teamA):pairName(m.teamB);const chips=m.sets.map(s=>`<span class="set-chip">${s.a}-${s.b}</span>`).join('')||'<span class="set-chip">W.O.</span>';const sch=m.schedule?`<div class="sch-chip" style="margin-top:5px">${m.schedule.day?`<span class="t">📆 ${esc(m.schedule.day)}</span>`:''}${m.schedule.time?`<span class="t">🕐 ${esc(m.schedule.time)}</span>`:''}${m.schedule.court?`<span class="c">🏟️ ${esc(m.schedule.court)}</span>`:''}</div>`:'';return`<div class="sup-match"><div class="done-result"><span class="badge badge-green">✓</span><div style="display:flex;gap:4px;flex-wrap:wrap">${chips}</div><strong style="color:var(--accent)">${esc(wn)}</strong><button class="btn btn-secondary btn-sm" onclick="reopenBM(${ri},'${m.id}')">✏️</button></div>${sch}</div>`;}
       const sets=m.editSets||[{a:'',b:''},{a:'',b:''}];
       const setRows=sets.map((s,i)=>`<div class="score-row"><span class="score-lbl">Set ${i+1}</span><input class="score-in" type="number" min="0" inputmode="numeric" value="${s.a}" id="bs_${ri}_${m.id}_${i}_a"/><span class="vs-sep">-</span><input class="score-in" type="number" min="0" inputmode="numeric" value="${s.b}" id="bs_${ri}_${m.id}_${i}_b"/>${i>0?`<button class="btn btn-secondary btn-sm" onclick="rmBS(${ri},'${m.id}',${i})">✕</button>`:''}</div>`).join('');
       const selA=m.editWinner===m.teamA?.id?'btn-primary':'btn-secondary',selB=m.editWinner===m.teamB?.id?'btn-primary':'btn-secondary';
       return`<div class="sup-match">
         <div class="sup-match-teams"><div>${m.labelA?`<span style="font-size:10px;color:var(--text2)">${esc(m.labelA)}</span> `:''} ${esc(m.teamA?.a)} / ${esc(m.teamA?.b)}</div><span style="color:var(--text2)">vs</span><div>${m.labelB?`<span style="font-size:10px;color:var(--text2)">${esc(m.labelB)}</span> `:''} ${esc(m.teamB?.a)} / ${esc(m.teamB?.b)}</div></div>
-        ${schForm(m.id,`b${ri}`,m.schedule)}${setRows}
+        ${schForm(m.id,`b${ri}`,m.schedule)}<div style="margin-bottom:10px"><button class="btn btn-secondary btn-sm" onclick="saveBSchedule(${ri},'${m.id}')">🕐 Guardar día y horario</button></div>${setRows}
         <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap"><button class="btn btn-secondary btn-sm" onclick="addBS(${ri},'${m.id}')">+ Set</button><button class="btn btn-secondary btn-sm" onclick="autoBW(${ri},'${m.id}')">Auto</button></div>
         <div style="margin-bottom:10px"><div style="font-size:10px;color:var(--text2);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">Ganador</div><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-sm ${selA}" onclick="setBW(${ri},'${m.id}','${m.teamA?.id}')">${esc(m.teamA?.a)}</button><button class="btn btn-sm ${selB}" onclick="setBW(${ri},'${m.id}','${m.teamB?.id}')">${esc(m.teamB?.a)}</button></div></div>
-        <button class="btn btn-primary btn-sm" onclick="saveBM(${ri},'${m.id}')">💾 Guardar</button>
+        <button class="btn btn-primary btn-sm" onclick="saveBM(${ri},'${m.id}')">💾 Guardar resultado</button>
       </div>`;
     }).join('');
     html+=`</div>`;
@@ -954,6 +961,13 @@ async function saveBM(ri,mId){
   await save();renderSupContent();toast('✓ Guardado');
 }
 function reopenBM(ri,mId){const m=getBM(ri,mId);if(!m)return;m.editSets=[...m.sets];m.editWinner=m.winner;m.status='pending';m.winner=null;m.sets=[];renderSupContent()}
+async function saveBSchedule(ri,mId){
+  const m=getBM(ri,mId);if(!m)return;
+  const sch=getSchVal(mId,`b${ri}`);
+  if(!sch){toast('Cargá día, hora o cancha');return}
+  m.schedule=sch;
+  await save();renderSupContent();toast('✓ Día y horario guardados');
+}
 
 // ═══════════════════════════════════
 // ZONE MATCH SUP
@@ -962,16 +976,16 @@ function getZone(id){return S.zones.find(z=>z.id==id)}
 function getZM(zId,mId){return getZone(zId)?.matches.find(m=>m.id===mId)}
 function getZMi(z,mId){return z.matches.findIndex(m=>m.id===mId)}
 function collectZS(mId,sets){return sets.map((_,i)=>({a:parseInt(document.getElementById(`zs_${mId}_${i}_a`)?.value)||0,b:parseInt(document.getElementById(`zs_${mId}_${i}_b`)?.value)||0,ga:parseInt(document.getElementById(`zsg_${mId}_${i}_a`)?.value)||0,gb:parseInt(document.getElementById(`zsg_${mId}_${i}_b`)?.value)||0}))}
-function schForm(mId,pfx,sch){const s=sch||{};return`<div class="sch-form"><div class="sch-form-title">📅 Horario y Cancha</div><div style="display:flex;gap:8px;flex-wrap:wrap"><div class="ig" style="min-width:110px"><label>Hora</label><input id="${pfx}_t_${mId}" type="time" value="${esc(s.time||'')}"/></div><div class="ig" style="min-width:120px"><label>Cancha</label><input id="${pfx}_c_${mId}" placeholder="Cancha 1" value="${esc(s.court||'')}"/></div><div class="ig" style="min-width:130px"><label>Notas</label><input id="${pfx}_n_${mId}" placeholder="Opcional" value="${esc(s.notes||'')}"/></div></div></div>`}
-function getSchVal(mId,pfx){const t=document.getElementById(`${pfx}_t_${mId}`)?.value||'';const c=document.getElementById(`${pfx}_c_${mId}`)?.value.trim()||'';const n=document.getElementById(`${pfx}_n_${mId}`)?.value.trim()||'';return(t||c)?{time:t,court:c,notes:n}:null}
+function schForm(mId,pfx,sch){const s=sch||{};return`<div class="sch-form"><div class="sch-form-title">📅 Día, Horario y Cancha</div><div style="display:flex;gap:8px;flex-wrap:wrap"><div class="ig" style="min-width:120px"><label>Día</label><input id="${pfx}_d_${mId}" placeholder="Ej: Miércoles" value="${esc(s.day||'')}"/></div><div class="ig" style="min-width:90px"><label>Hora</label><input id="${pfx}_t_${mId}" type="time" value="${esc(s.time||'')}"/></div><div class="ig" style="min-width:120px"><label>Cancha</label><input id="${pfx}_c_${mId}" placeholder="Cancha 1" value="${esc(s.court||'')}"/></div><div class="ig" style="min-width:130px"><label>Notas</label><input id="${pfx}_n_${mId}" placeholder="Opcional" value="${esc(s.notes||'')}"/></div></div></div>`}
+function getSchVal(mId,pfx){const d=document.getElementById(`${pfx}_d_${mId}`)?.value.trim()||'';const t=document.getElementById(`${pfx}_t_${mId}`)?.value||'';const c=document.getElementById(`${pfx}_c_${mId}`)?.value.trim()||'';const n=document.getElementById(`${pfx}_n_${mId}`)?.value.trim()||'';return(d||t||c||n)?{day:d,time:t,court:c,notes:n}:null}
 
 function renderSupZM(m,zId,mi){
   if(!m.teamA||!m.teamB)return`<div class="sup-match"><div class="sup-match-title">${esc(m.label)}</div><div class="pending-match-box">⏳ Esperando resultado anterior</div></div>`;
-  if(m.status==='done'){const wn=m.winner===m.teamA.id?pairName(m.teamA):pairName(m.teamB);const chips=m.sets.map(s=>`<span class="set-chip">${s.a}-${s.b}${s.ga+s.gb>0?` (${s.ga}-${s.gb})`:''}</span>`).join('')||'<span class="set-chip">W.O.</span>';const sch=m.schedule?`<div class="sch-chip" style="margin-top:5px"><span class="t">📅 ${esc(m.schedule.time)}</span><span class="c">🏟️ ${esc(m.schedule.court)}</span></div>`:'';return`<div class="sup-match"><div class="sup-match-title">${esc(m.label)}</div><div class="done-result"><span class="badge badge-green">✓</span><div style="display:flex;gap:4px;flex-wrap:wrap">${chips}</div><strong style="color:var(--accent)">${esc(wn)}</strong><button class="btn btn-secondary btn-sm" onclick="reopenZM('${zId}','${m.id}')">✏️</button></div>${sch}</div>`;}
+  if(m.status==='done'){const wn=m.winner===m.teamA.id?pairName(m.teamA):pairName(m.teamB);const chips=m.sets.map(s=>`<span class="set-chip">${s.a}-${s.b}${s.ga+s.gb>0?` (${s.ga}-${s.gb})`:''}</span>`).join('')||'<span class="set-chip">W.O.</span>';const sch=m.schedule?`<div class="sch-chip" style="margin-top:5px">${m.schedule.day?`<span class="t">📆 ${esc(m.schedule.day)}</span>`:''}${m.schedule.time?`<span class="t">🕐 ${esc(m.schedule.time)}</span>`:''}${m.schedule.court?`<span class="c">🏟️ ${esc(m.schedule.court)}</span>`:''}</div>`:'';return`<div class="sup-match"><div class="sup-match-title">${esc(m.label)}</div><div class="done-result"><span class="badge badge-green">✓</span><div style="display:flex;gap:4px;flex-wrap:wrap">${chips}</div><strong style="color:var(--accent)">${esc(wn)}</strong><button class="btn btn-secondary btn-sm" onclick="reopenZM('${zId}','${m.id}')">✏️</button></div>${sch}</div>`;}
   const sets=m.editSets||[{a:'',b:'',ga:'',gb:''},{a:'',b:'',ga:'',gb:''}];
   const selA=m.editWinner===m.teamA.id?'btn-primary':'btn-secondary',selB=m.editWinner===m.teamB.id?'btn-primary':'btn-secondary';
   const setRows=sets.map((s,i)=>`<div class="score-row"><span class="score-lbl">Set ${i+1}</span><input class="score-in" type="number" min="0" inputmode="numeric" value="${s.a}" id="zs_${m.id}_${i}_a"/><span class="vs-sep">-</span><input class="score-in" type="number" min="0" inputmode="numeric" value="${s.b}" id="zs_${m.id}_${i}_b"/><span style="color:var(--text2);font-size:10px;margin-left:4px">Gms:</span><input class="score-in" type="number" min="0" inputmode="numeric" value="${s.ga}" id="zsg_${m.id}_${i}_a" style="width:36px"/><span class="vs-sep" style="font-size:11px">-</span><input class="score-in" type="number" min="0" inputmode="numeric" value="${s.gb}" id="zsg_${m.id}_${i}_b" style="width:36px"/>${i>0?`<button class="btn btn-secondary btn-sm" onclick="rmZS('${zId}','${m.id}',${i})">✕</button>`:''}</div>`).join('');
-  return`<div class="sup-match"><div class="sup-match-title">${esc(m.label)}</div><div class="sup-match-teams">${pairName(m.teamA)} <span style="color:var(--text2)">vs</span> ${pairName(m.teamB)}</div>${schForm(m.id,'z',m.schedule)}${setRows}<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap"><button class="btn btn-secondary btn-sm" onclick="addZS('${zId}','${m.id}')">+ Set</button><button class="btn btn-secondary btn-sm" onclick="autoZW('${zId}','${m.id}')">Auto</button></div><div style="margin-bottom:10px"><div style="font-size:10px;color:var(--text2);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">Ganador</div><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-sm ${selA}" onclick="setZW('${zId}','${m.id}','${m.teamA.id}')">${esc(m.teamA.a)}</button><button class="btn btn-sm ${selB}" onclick="setZW('${zId}','${m.id}','${m.teamB.id}')">${esc(m.teamB.a)}</button></div></div><button class="btn btn-primary btn-sm" onclick="saveZM('${zId}','${m.id}')">💾 Guardar</button></div>`;
+  return`<div class="sup-match"><div class="sup-match-title">${esc(m.label)}</div><div class="sup-match-teams">${pairName(m.teamA)} <span style="color:var(--text2)">vs</span> ${pairName(m.teamB)}</div>${schForm(m.id,'z',m.schedule)}<div style="margin-bottom:10px"><button class="btn btn-secondary btn-sm" onclick="saveZSchedule('${zId}','${m.id}')">🕐 Guardar día y horario</button></div>${setRows}<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap"><button class="btn btn-secondary btn-sm" onclick="addZS('${zId}','${m.id}')">+ Set</button><button class="btn btn-secondary btn-sm" onclick="autoZW('${zId}','${m.id}')">Auto</button></div><div style="margin-bottom:10px"><div style="font-size:10px;color:var(--text2);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">Ganador</div><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-sm ${selA}" onclick="setZW('${zId}','${m.id}','${m.teamA.id}')">${esc(m.teamA.a)}</button><button class="btn btn-sm ${selB}" onclick="setZW('${zId}','${m.id}','${m.teamB.id}')">${esc(m.teamB.a)}</button></div></div><button class="btn btn-primary btn-sm" onclick="saveZM('${zId}','${m.id}')">💾 Guardar resultado</button></div>`;
 }
 function addZS(zId,mId){const m=getZM(zId,mId);if(!m)return;m.editSets=collectZS(mId,m.editSets||[]);m.schedule=getSchVal(mId,'z')||m.schedule;m.editSets.push({a:'',b:'',ga:'',gb:''});renderSupContent()}
 function rmZS(zId,mId,i){const m=getZM(zId,mId);if(!m)return;m.editSets=collectZS(mId,m.editSets||[]);m.schedule=getSchVal(mId,'z')||m.schedule;m.editSets.splice(i,1);renderSupContent()}
@@ -985,6 +999,14 @@ async function saveZM(zId,mId){
   m.sets=sets;m.winner=m.editWinner;m.status='done';delete m.editSets;delete m.editWinner;
   const z=getZone(zId);propagateZone(z,getZMi(z,mId));recalcZone(z);
   await save();renderSupContent();toast('✓ Guardado');
+}
+async function saveZSchedule(zId,mId){
+  const m=getZM(zId,mId);if(!m)return;
+  m.editSets=collectZS(mId,m.editSets||[]);
+  const sch=getSchVal(mId,'z');
+  if(!sch){toast('Cargá día, hora o cancha');return}
+  m.schedule=sch;
+  await save();renderSupContent();toast('✓ Día y horario guardados');
 }
 function reopenZM(zId,mId){
   const m=getZM(zId,mId);if(!m)return;
@@ -1078,7 +1100,7 @@ function drawZBox(ctx,z,x,y,w){
   let my=y+th+6;
   z.matches.filter(m=>m.teamA&&m.teamB).forEach(m=>{
     const aW=m.status==='done'&&m.winner===m.teamA.id,bW=m.status==='done'&&m.winner===m.teamB.id;
-    if(m.schedule){ctx.font='17px Rajdhani,Arial';ctx.fillStyle='rgba(0,229,160,.6)';ctx.textAlign='left';ctx.fillText(`⏰ ${m.schedule.time}${m.schedule.court?' · '+m.schedule.court:''}`,x+10,my+14)}
+    if(m.schedule){const sd=[m.schedule.day,m.schedule.time].filter(Boolean).join(' ');ctx.font='17px Rajdhani,Arial';ctx.fillStyle='rgba(0,229,160,.6)';ctx.textAlign='left';ctx.fillText(`⏰ ${sd}${m.schedule.court?' · '+m.schedule.court:''}`,x+10,my+14)}
     ctx.font=`${aW?'bold ':''} 18px Rajdhani,Arial`;ctx.fillStyle=aW?'#00e5a0':bW?'rgba(255,255,255,.4)':'rgba(255,255,255,.85)';ctx.textAlign='left';ctx.fillText(truncate(m.teamA.a+' / '+m.teamA.b,26),x+10,my+32);
     ctx.font='bold 15px Arial';ctx.fillStyle='rgba(255,255,255,.25)';ctx.textAlign='center';ctx.fillText('vs',x+w/2,my+32);
     ctx.font=`${bW?'bold ':''} 18px Rajdhani,Arial`;ctx.fillStyle=bW?'#00e5a0':aW?'rgba(255,255,255,.4)':'rgba(255,255,255,.85)';ctx.textAlign='right';ctx.fillText(truncate(m.teamB.a+' / '+m.teamB.b,26),x+w-10,my+32);
