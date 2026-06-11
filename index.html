@@ -124,8 +124,7 @@ tr:last-child td{border-bottom:none}
 .drop-team.winner{color:var(--accent);background:rgba(0,229,160,.07);border-left-color:var(--accent)}
 .drop-team.bye-team,.drop-team.empty-team{color:var(--text2);font-style:italic;font-size:11px}
 .drop-team-names{display:flex;flex-direction:column;gap:1px;flex:1}
-.drop-p1{font-size:12px;line-height:1.3}.drop-p2{font-size:11px;color:var(--text2);line-height:1.3}
-.drop-team.winner .drop-p2{color:rgba(0,229,160,.7)}
+.drop-p1{font-size:12px;line-height:1.3}.drop-p2{font-size:12px;line-height:1.3}
 .drop-score{font-size:11px;color:var(--text2);font-weight:700;flex-shrink:0;margin-left:6px}.drop-score.ws{color:var(--accent)}
 .drop-seed{font-size:9px;color:var(--text2);margin-right:4px;opacity:.7;flex-shrink:0}
 .drop-sch{padding:4px 10px 6px;border-top:1px solid var(--border);background:rgba(79,195,247,.04);font-size:10px;display:flex;gap:6px}
@@ -1099,7 +1098,7 @@ function schForm(mId,pfx,sch){const s=sch||{};return`<div class="sch-form"><div 
 function getSchVal(mId,pfx){const d=document.getElementById(`${pfx}_d_${mId}`)?.value.trim()||'';const t=document.getElementById(`${pfx}_t_${mId}`)?.value||'';const c=document.getElementById(`${pfx}_c_${mId}`)?.value.trim()||'';const n=document.getElementById(`${pfx}_n_${mId}`)?.value.trim()||'';return(d||t||c||n)?{day:d,time:t,court:c,notes:n}:null}
 
 function renderSupZM(m,zId,mi){
-  if(!m.teamA||!m.teamB)return`<div class="sup-match"><div class="sup-match-title">${esc(m.label)}</div><div class="pending-match-box">⏳ Esperando resultado anterior</div></div>`;
+  if(!m.teamA||!m.teamB)return`<div class="sup-match"><div class="sup-match-title">${esc(m.label)}</div><div class="pending-match-box" style="margin-bottom:10px">⏳ Parejas a definir (depende de resultados anteriores). Igual podés dejar agendado el día y horario.</div>${schForm(m.id,'z',m.schedule)}<div><button class="btn btn-secondary btn-sm" onclick="saveZSchedule('${zId}','${m.id}')">🕐 Guardar día y horario</button></div></div>`;
   if(m.status==='done'){const wn=m.winner===m.teamA.id?pairName(m.teamA):pairName(m.teamB);const chips=m.sets.map(s=>`<span class="set-chip">${s.a}-${s.b}${s.ga+s.gb>0?` (${s.ga}-${s.gb})`:''}</span>`).join('')||'<span class="set-chip">W.O.</span>';const sch=m.schedule?`<div class="sch-chip" style="margin-top:5px">${m.schedule.day?`<span class="t">📆 ${esc(m.schedule.day)}</span>`:''}${m.schedule.time?`<span class="t">🕐 ${esc(m.schedule.time)}</span>`:''}${m.schedule.court?`<span class="c">🏟️ ${esc(m.schedule.court)}</span>`:''}</div>`:'';return`<div class="sup-match"><div class="sup-match-title">${esc(m.label)}</div><div class="done-result"><span class="badge badge-green">✓</span><div style="display:flex;gap:4px;flex-wrap:wrap">${chips}</div><strong style="color:var(--accent)">${esc(wn)}</strong><button class="btn btn-secondary btn-sm" onclick="reopenZM('${zId}','${m.id}')">✏️</button></div>${sch}</div>`;}
   const sets=m.editSets||[{a:'',b:'',ga:'',gb:''},{a:'',b:'',ga:'',gb:''}];
   const selA=m.editWinner===m.teamA.id?'btn-primary':'btn-secondary',selB=m.editWinner===m.teamB.id?'btn-primary':'btn-secondary';
