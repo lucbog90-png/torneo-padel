@@ -158,6 +158,11 @@ tr:last-child td{border-bottom:none}
 .ad-banner.clickable{cursor:pointer}
 .ad-img{max-height:84px;max-width:80vw;object-fit:contain}
 .ad-text{color:var(--accent2);font-weight:700;font-size:14px;letter-spacing:2px;text-transform:uppercase}
+.ad-marquee{width:100%;overflow:hidden;display:flex}
+.ad-track{display:inline-flex;align-items:center;gap:40px;white-space:nowrap;padding-left:40px;animation:adscroll 30s linear infinite;will-change:transform}
+.ad-track img.ad-img{height:74px;max-height:74px;width:auto;max-width:none;object-fit:contain;border-radius:6px}
+.ad-track .ad-text{font-size:18px;color:var(--accent2);font-weight:700;white-space:nowrap;letter-spacing:1px}
+@keyframes adscroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
 .bg-hint{position:fixed;bottom:calc(84px + var(--safe-bot));left:12px;z-index:91;background:rgba(0,0,0,.65);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:10px;color:var(--text2);cursor:pointer;display:flex;align-items:center;gap:5px}
 
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:300;display:flex;align-items:center;justify-content:center;padding:16px}
@@ -278,9 +283,8 @@ tr:last-child td{border-bottom:none}
     <button class="nav-btn" id="snav-config" onclick="showSTab('config')">Config.</button>
   </nav>
   <main class="app-main" id="supContent"></main>
-  <div class="ad-banner clickable" onclick="document.getElementById('adInput').click()">
-    <div id="adContent"><span style="font-size:18px">📢</span><span class="ad-text">PUBLICIDAD — Click para cargar</span></div>
-    <input type="file" id="adInput" accept="image/*" style="display:none" onchange="loadAd(this)"/>
+  <div class="ad-banner" id="supAdBanner">
+    <div id="adContent"><span style="font-size:18px">📢</span><span class="ad-text">ZONA DE PUBLICIDAD</span></div>
   </div>
   <div class="bg-hint" onclick="document.getElementById('bgInput').click()">
     🖼️ Fondo<input type="file" id="bgInput" accept="image/*" style="display:none" onchange="loadBg(this)"/>
@@ -467,9 +471,8 @@ function applyVisuals(){
   renderSponsors();
 }
 // Banner inferior unificado: muestra la imagen de banner (si hay) + todos los
-// auspiciantes cargados, rotándolos. Así se cargan una sola vez (en Config) y
-// aparecen tanto en el inicio como en las vistas de jugadores y supervisor.
-let _adRotIdx=0,_adRotTimer=null;
+// auspiciantes cargados, en una fila que se desplaza (marquesina). Así se cargan
+// una sola vez (en Config) y aparecen en el inicio y en jugadores/supervisor.
 function adItems(){
   const items=[];
   if(S.adDataUrl)items.push({type:'img',src:S.adDataUrl});
@@ -480,21 +483,13 @@ function adItems(){
   return items;
 }
 function renderAdBanners(){
-  if(_adRotTimer){clearInterval(_adRotTimer);_adRotTimer=null}
   const items=adItems();
   const slots=[{id:'adContent',ph:'<span style="font-size:18px">📢</span><span class="ad-text">PUBLICIDAD — Click para cargar</span>'},{id:'playerAdContent',ph:'<span style="font-size:18px">📢</span><span class="ad-text">ZONA DE PUBLICIDAD</span>'}];
   if(!items.length){slots.forEach(s=>{const el=document.getElementById(s.id);if(el)el.innerHTML=s.ph});return}
-  const show=()=>{
-    const it=items[_adRotIdx%items.length];
-    slots.forEach(s=>{
-      const el=document.getElementById(s.id);if(!el)return;el.textContent='';
-      if(it.type==='img'){const im=document.createElement('img');im.className='ad-img';im.src=it.src;el.appendChild(im)}
-      else{const s1=document.createElement('span');s1.style.fontSize='18px';s1.textContent='📢';const s2=document.createElement('span');s2.className='ad-text';s2.textContent=it.text;el.appendChild(s1);el.appendChild(s2)}
-    });
-    _adRotIdx++;
-  };
-  _adRotIdx=0;show();
-  if(items.length>1)_adRotTimer=setInterval(show,4500);
+  const one=items.map(it=>it.type==='img'?`<img class="ad-img" src="${esc(it.src)}"/>`:`<span class="ad-text">📢 ${esc(it.text)}</span>`).join('');
+  const dur=Math.max(18,items.length*7);
+  const html=`<div class="ad-marquee"><div class="ad-track" style="animation-duration:${dur}s">${one}${one}</div></div>`;
+  slots.forEach(s=>{const el=document.getElementById(s.id);if(el)el.innerHTML=html});
 }
 
 // ═══════════════════════════════════
@@ -623,7 +618,7 @@ async function uploadImage(file,kind){
   return data.publicUrl;
 }
 async function loadLogoFile(inp){const f=inp.files[0];if(!f)return;toast('Subiendo logo...');const url=await uploadImage(f,'logo');if(!url)return;S.logoDataUrl=url;await save();applyVisuals();toast('Logo guardado ✓')}
-async function loadAd(inp){const f=inp.files[0];if(!f)return;toast('Subiendo banner...');const url=await uploadImage(f,'ad');if(!url)return;S.adDataUrl=url;await save();applyVisuals();toast('Banner guardado ✓')}
+async function loadAd(inp){const f=inp.files[0];if(!f)return;toast('Subiendo banner...');const url=await uploadImage(f,'ad');if(!url)return;S.adDataUrl=url;await save();applyVisuals();renderSupContent();toast('Banner guardado ✓')}
 async function loadBg(inp){const f=inp.files[0];if(!f)return;toast('Subiendo fondo...');const url=await uploadImage(f,'bg');if(!url)return;S.bgDataUrl=url;document.body.style.setProperty('--court-bg',`url("${encodeURI(url)}")`);await save();toast('Fondo guardado ✓')}
 
 // ═══════════════════════════════════
@@ -654,6 +649,10 @@ function renderSupTorneo(){
   </div>
   <div class="card">
     <div class="card-title">🤝 Auspiciantes</div>
+    ${S.adDataUrl?`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:rgba(255,107,53,.05)">
+      <div style="display:flex;align-items:center;gap:10px"><img src="${esc(S.adDataUrl)}" style="height:40px;border-radius:6px"/><span style="font-size:12px;color:var(--text2)">Banner de imagen cargado</span></div>
+      <button class="btn btn-danger btn-sm" onclick="clearAdBanner()">🗑️ Quitar</button>
+    </div>`:''}
     ${S.sponsors.length?`<table style="margin-bottom:14px"><thead><tr><th>Logo</th><th>Nombre</th><th></th></tr></thead><tbody>${spRows}</tbody></table>`:''}
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
       <div class="ig" style="min-width:150px"><label>Nombre</label><input id="spName" placeholder="Ej: SportZone"/></div>
@@ -672,6 +671,7 @@ let _spLogoUrl=null;
 async function setSponsorLogo(inp){const f=inp.files[0];if(!f)return;toast('Subiendo logo...');const url=await uploadImage(f,'sponsor');if(!url)return;_spLogoUrl=url;document.getElementById('spLogoPreview').innerHTML=`<img src="${esc(url)}" style="height:40px;border-radius:6px;border:1px solid var(--border)"/>`}
 async function addSponsor(){const name=document.getElementById('spName').value.trim();if(!name&&!_spLogoUrl){toast('Ingresá nombre o logo');return}S.sponsors.push({name:name||'',logoUrl:_spLogoUrl||null});_spLogoUrl=null;await save();renderSponsors();renderAdBanners();renderSupContent();toast('Auspiciante agregado ✓')}
 async function removeSponsor(i){S.sponsors.splice(i,1);await save();renderSponsors();renderAdBanners();renderSupContent()}
+async function clearAdBanner(){S.adDataUrl=null;await save();applyVisuals();renderSupContent();toast('Banner de imagen quitado ✓')}
 function renderSponsors(){
   const list=document.getElementById('sponsorsList'),noMsg=document.getElementById('noSponsorsMsg');
   if(!list)return;
@@ -1267,11 +1267,9 @@ function renderConfig(){
       <button class="btn btn-danger" onclick="logout()">🚪 Cerrar sesión</button>
     </div>
     <div class="card"><div class="card-title">🎨 Visual</div>
-      <div class="ig" style="margin-bottom:14px"><label>Texto publicidad</label>
-        <input placeholder="Patrocinado por..." oninput="['adContent','playerAdContent'].forEach(id=>{const e=document.getElementById(id);if(e){e.textContent='';const s1=document.createElement('span');s1.style.fontSize='18px';s1.textContent='📢';const s2=document.createElement('span');s2.className='ad-text';s2.textContent=this.value;e.appendChild(s1);e.appendChild(s2)}})"/>
-      </div>
-      <div class="ig" style="margin-bottom:14px"><label>Banner</label>
-        <label class="upload-area"><div style="font-size:26px">📷</div><p>Cargar imagen</p><input type="file" accept="image/*" style="display:none" onchange="loadAd(this)"/></label>
+      <div class="ig" style="margin-bottom:14px"><label>Banner de publicidad (opcional)</label>
+        ${S.adDataUrl?`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:rgba(255,107,53,.05)"><img src="${esc(S.adDataUrl)}" style="height:40px;border-radius:6px"/><button class="btn btn-danger btn-sm" onclick="clearAdBanner()">🗑️ Quitar</button></div>`:`<label class="upload-area"><div style="font-size:26px">📷</div><p>Cargar imagen</p><input type="file" accept="image/*" style="display:none" onchange="loadAd(this)"/></label>`}
+        <p style="font-size:11px;color:var(--text2);margin-top:6px">Las publicidades principales se cargan en <strong>Torneo → Auspiciantes</strong>.</p>
       </div>
       <div class="ig"><label>Fondo</label>
         <label class="upload-area"><div style="font-size:26px">🏟️</div><p>Cargar fondo</p><input type="file" accept="image/*" style="display:none" onchange="loadBg(this)"/></label>
