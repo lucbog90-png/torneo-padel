@@ -851,7 +851,7 @@ function renderZoneCard(z){
     :z.pairs.map((p,i)=>`<tr><td style="color:var(--text2)">${i+1}</td><td style="font-weight:600;font-size:13px">${esc(p.a)}<br>${esc(p.b)}</td><td>-</td><td>-</td><td>-</td></tr>`).join('');
   const matchRows=z.matches.map(m=>matchRowHTML(m)).join('');
   const qualLine=z.qualified.map((q,i)=>`<span>${['🥇','🥈','🥉'][i]} ${esc(q.a)}</span>`).join(' · ');
-  return`<div class="zone-card"><div class="zone-card-title"><span>${z.name} ${z.size===4?'<span class="badge badge-blue">4p</span>':''}${z.days&&z.days.length?` <span class="badge badge-blue" style="font-weight:600">📅 ${z.days.map(d=>DIA_ABBR[d]||d).join('/')}</span>`:''}</span>${z.closed?'<span class="badge badge-green">✓</span>':''}</div>
+  return`<div class="zone-card"><div class="zone-card-title"><span>${z.name} ${z.size===4?'<span class="badge badge-blue">4p</span>':''}</span>${z.closed?'<span class="badge badge-green">✓</span>':''}</div>
     <table style="margin-bottom:10px"><thead><tr><th>Pos</th><th>Pareja</th><th>G</th><th>Sets</th><th>Dif</th></tr></thead><tbody>${stRows}</tbody></table>
     ${matchRows}
     ${qualLine?`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:11px;font-weight:600;color:var(--text2)">${qualLine}</div>`:''}
