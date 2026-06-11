@@ -78,6 +78,10 @@ body::before{content:'';position:fixed;inset:0;background:linear-gradient(rgba(0
 .ig label{font-size:10px;color:var(--text2);letter-spacing:1px;text-transform:uppercase}
 .ig input,.ig select,.ig textarea{background:rgba(18,24,36,.92);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'Rajdhani';font-size:15px;padding:10px 12px;outline:none;transition:border-color .2s;-webkit-appearance:none;resize:vertical}
 .ig input:focus,.ig textarea:focus{border-color:var(--accent)}
+.day-field-label{display:block;font-size:10px;color:var(--text2);letter-spacing:1px;text-transform:uppercase;margin-bottom:7px}
+.day-chip{display:inline-flex;align-items:center;gap:8px;background:rgba(79,195,247,.08);border:1px solid var(--border);border-radius:10px;padding:10px 14px;cursor:pointer;font-size:15px;font-weight:600;color:var(--text);user-select:none;transition:all .15s}
+.day-chip input[type=checkbox]{width:18px;height:18px;-webkit-appearance:auto;appearance:auto;accent-color:var(--accent);cursor:pointer;margin:0;padding:0;background:none;border-radius:0}
+.day-chip:has(input:checked){background:rgba(0,229,160,.14);border-color:var(--accent);color:var(--accent)}
 .btn{font-family:'Rajdhani';font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase;border:none;border-radius:10px;padding:11px 18px;cursor:pointer;transition:all .18s;display:inline-flex;align-items:center;justify-content:center;gap:6px;touch-action:manipulation}
 .btn-primary{background:var(--accent);color:#000}
 .btn-secondary{background:rgba(18,24,36,.9);color:var(--text);border:1px solid var(--border)}
@@ -669,14 +673,14 @@ function renderInscripcion(){
     <td><span class="badge ${S.started?'badge-green':'badge-blue'}">${S.started?'Confirmada':'Inscripta'}</span></td>
     ${!S.started?`<td><button class="btn btn-danger btn-sm" onclick="removePair('${p.id}')">✕</button></td>`:'<td></td>'}
   </tr>`).join('');
-  const dayChips=DIAS.map(d=>`<label style="display:inline-flex;align-items:center;gap:5px;background:rgba(79,195,247,.08);border:1px solid var(--border);border-radius:8px;padding:8px 12px;cursor:pointer;font-size:14px"><input type="checkbox" id="day_${d}" style="width:16px;height:16px"/> ${d}</label>`).join('');
+  const dayChips=DIAS.map(d=>`<label class="day-chip"><input type="checkbox" id="day_${d}"/> ${d}</label>`).join('');
   const form=S.started
     ?`<div style="display:flex;align-items:center;gap:10px"><span style="font-size:20px">⚡</span><div><div style="color:var(--accent2);font-size:15px;font-weight:700">Torneo en curso</div><div style="color:var(--text2);font-size:12px">${S.pairs.length} parejas · ${S.zones.length} zonas</div></div></div>`
     :`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
         <div class="ig"><label>Jugador 1</label><input id="p1a" placeholder="Nombre" onkeydown="if(event.key==='Enter')addPair()"/></div>
         <div class="ig"><label>Jugador 2</label><input id="p1b" placeholder="Nombre" onkeydown="if(event.key==='Enter')addPair()"/></div>
       </div>
-      <div class="ig" style="margin-bottom:12px"><label>Días que pueden jugar (elegí 2)</label>
+      <div style="margin-bottom:12px"><span class="day-field-label">Días que pueden jugar (elegí 2)</span>
         <div style="display:flex;gap:8px;flex-wrap:wrap">${dayChips}</div>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
@@ -1157,13 +1161,13 @@ function openEditPair(zId,pairId){
   if(zoneHasResults(z)){toast('Esta zona ya tiene resultados. No se puede editar.');return}
   const p=z.pairs.find(x=>x.id===pairId);if(!p)return;
   const days=p.days||[];
-  const chips=DIAS.map(d=>`<label style="display:inline-flex;align-items:center;gap:5px;background:rgba(79,195,247,.08);border:1px solid var(--border);border-radius:8px;padding:8px 12px;cursor:pointer;font-size:14px"><input type="checkbox" id="ed_day_${d}" ${days.includes(d)?'checked':''} style="width:16px;height:16px"/> ${d}</label>`).join('');
+  const chips=DIAS.map(d=>`<label class="day-chip"><input type="checkbox" id="ed_day_${d}" ${days.includes(d)?'checked':''}/> ${d}</label>`).join('');
   document.getElementById('zoneEditBody').innerHTML=`
     <h2>✏️ Editar pareja</h2>
     <p>${esc(z.name)}</p>
     <div class="ig"><label>Jugador 1</label><input id="ed_a" value="${esc(p.a)}"/></div>
     <div class="ig"><label>Jugador 2</label><input id="ed_b" value="${esc(p.b)}"/></div>
-    <div class="ig"><label>Días que pueden jugar (elegí 2)</label><div style="display:flex;gap:8px;flex-wrap:wrap">${chips}</div></div>
+    <div style="margin-bottom:12px;text-align:left"><span class="day-field-label">Días que pueden jugar (elegí 2)</span><div style="display:flex;gap:8px;flex-wrap:wrap">${chips}</div></div>
     <div class="modal-btns">
       <button class="btn btn-primary" onclick="savePairEdit('${zId}','${pairId}')">Guardar</button>
       <button class="btn btn-secondary" onclick="closeZoneEdit()">Cancelar</button>
