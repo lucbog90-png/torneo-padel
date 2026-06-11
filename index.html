@@ -341,6 +341,12 @@ tr:last-child td{border-bottom:none}
   </div>
 </div>
 
+<div class="overlay" id="zoneEditModal" style="display:none">
+  <div class="modal" style="width:min(560px,100%);max-height:90vh;overflow-y:auto">
+    <div id="zoneEditBody"></div>
+  </div>
+</div>
+
 <canvas id="publishCanvas" style="display:none"></canvas>
 <canvas id="dropCanvas" style="display:none"></canvas>
 <div class="toast" id="toast" style="display:none"></div>
@@ -652,18 +658,26 @@ function renderSponsors(){
 // ═══════════════════════════════════
 // INSCRIPCIÓN
 // ═══════════════════════════════════
+const DIAS=['Miércoles','Jueves','Viernes'];
+const DIA_ABBR={'Miércoles':'Mié','Jueves':'Jue','Viernes':'Vie'};
+function diasTexto(p){return (p&&p.days&&p.days.length)?p.days.map(d=>DIA_ABBR[d]||d).join(', '):'—';}
 function renderInscripcion(){
   const rows=S.pairs.map((p,i)=>`<tr>
     <td style="color:var(--text2);font-weight:700">${i+1}</td>
     <td style="font-weight:600">${esc(p.a)} / ${esc(p.b)}</td>
+    <td><span class="badge badge-blue" style="white-space:nowrap">📅 ${diasTexto(p)}</span></td>
     <td><span class="badge ${S.started?'badge-green':'badge-blue'}">${S.started?'Confirmada':'Inscripta'}</span></td>
     ${!S.started?`<td><button class="btn btn-danger btn-sm" onclick="removePair('${p.id}')">✕</button></td>`:'<td></td>'}
   </tr>`).join('');
+  const dayChips=DIAS.map(d=>`<label style="display:inline-flex;align-items:center;gap:5px;background:rgba(79,195,247,.08);border:1px solid var(--border);border-radius:8px;padding:8px 12px;cursor:pointer;font-size:14px"><input type="checkbox" id="day_${d}" style="width:16px;height:16px"/> ${d}</label>`).join('');
   const form=S.started
     ?`<div style="display:flex;align-items:center;gap:10px"><span style="font-size:20px">⚡</span><div><div style="color:var(--accent2);font-size:15px;font-weight:700">Torneo en curso</div><div style="color:var(--text2);font-size:12px">${S.pairs.length} parejas · ${S.zones.length} zonas</div></div></div>`
     :`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
         <div class="ig"><label>Jugador 1</label><input id="p1a" placeholder="Nombre" onkeydown="if(event.key==='Enter')addPair()"/></div>
         <div class="ig"><label>Jugador 2</label><input id="p1b" placeholder="Nombre" onkeydown="if(event.key==='Enter')addPair()"/></div>
+      </div>
+      <div class="ig" style="margin-bottom:12px"><label>Días que pueden jugar (elegí 2)</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">${dayChips}</div>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
         <button class="btn btn-primary" onclick="addPair()">+ Inscribir</button>
@@ -672,9 +686,16 @@ function renderInscripcion(){
   return`<div class="card">${form}</div>
     <div class="card"><div class="card-title">📋 Parejas (${S.pairs.length})</div>
     ${!S.pairs.length?`<div class="empty"><div class="ei">🎾</div><p>Sin parejas aún</p></div>`
-    :`<table><thead><tr><th>#</th><th>Pareja</th><th>Estado</th><th></th></tr></thead><tbody>${rows}</tbody></table>`}</div>`;
+    :`<table><thead><tr><th>#</th><th>Pareja</th><th>Días</th><th>Estado</th><th></th></tr></thead><tbody>${rows}</tbody></table>`}</div>`;
 }
-async function addPair(){const a=document.getElementById('p1a').value.trim(),b=document.getElementById('p1b').value.trim();if(!a||!b){toast('Completá ambos jugadores');return}if(S.pairs.length>=48){toast('Máximo 48 parejas');return}S.pairs.push({id:uid(),a,b});await save();toast('✓ Pareja inscrita');renderSupContent()}
+async function addPair(){
+  const a=document.getElementById('p1a').value.trim(),b=document.getElementById('p1b').value.trim();
+  if(!a||!b){toast('Completá ambos jugadores');return}
+  const days=DIAS.filter(d=>document.getElementById('day_'+d)?.checked);
+  if(days.length!==2){toast('Elegí exactamente 2 días de juego');return}
+  if(S.pairs.length>=48){toast('Máximo 48 parejas');return}
+  S.pairs.push({id:uid(),a,b,days});await save();toast('✓ Pareja inscrita');renderSupContent();
+}
 async function removePair(id){S.pairs=S.pairs.filter(p=>p.id!==id);await save();renderSupContent()}
 function confirmStart(){
   const sizes=partitionZones(S.pairs.length);
@@ -700,15 +721,34 @@ function partitionZones(n){
   return sizes; // ej: 7 -> [4,3]; 10 -> [4,3,3]; 6 -> [3,3]
 }
 async function startTournament(){
-  const sh=shuffle(S.pairs);const n=sh.length;
+  const n=S.pairs.length;
   const sizes=partitionZones(n);
   if(!sizes){toast('No se pudieron armar las zonas con esa cantidad de parejas.',4000);return}
+  // Sorteo por días (regla blanda): agrupo por combinación de días, mezclo dentro
+  // de cada grupo, ordeno los grupos de mayor a menor y recién ahí corto en zonas.
+  // Así las parejas con los mismos días tienden a caer juntas; si un grupo no llena
+  // una zona, se completa con las del grupo siguiente (mezcla solo cuando hace falta).
+  const groups={};
+  S.pairs.forEach(p=>{
+    const key=(p.days&&p.days.length)?[...p.days].sort().join('|'):'zzz';
+    (groups[key]=groups[key]||[]).push(p);
+  });
+  let ordered=[];
+  Object.values(groups).sort((a,b)=>b.length-a.length).forEach(g=>ordered.push(...shuffle(g)));
   S.zones=[];let idx=0,zi=0;
-  sizes.forEach(sz=>{const ps=sh.slice(idx,idx+sz);idx+=sz;S.zones.push(buildZone(zi++,ps))});
+  sizes.forEach(sz=>{const ps=ordered.slice(idx,idx+sz);idx+=sz;S.zones.push(buildZone(zi++,ps))});
   S.zones.forEach(z=>recalcZone(z));
   S.started=true;await save();
   enableSTab('resultados');enablePTab('resultados');
   showSTab('resultados');toast('¡Torneo iniciado! ✓',3000);
+}
+// Días en común de una zona (intersección de los días de sus parejas).
+function zoneDays(ps){
+  const withDays=ps.filter(p=>p.days&&p.days.length);
+  if(!withDays.length)return[];
+  let inter=[...withDays[0].days];
+  withDays.slice(1).forEach(p=>{inter=inter.filter(d=>p.days.includes(d))});
+  return DIAS.filter(d=>inter.includes(d)); // ordenados Mié/Jue/Vie
 }
 function buildZone(idx,ps){
   const matches=[];
@@ -722,7 +762,7 @@ function buildZone(idx,ps){
     matches.push(makeMatch(null,null,'Partido 3 — Ganadores',2,{waitForA:{matchIdx:0,result:'winner'},waitForB:{matchIdx:1,result:'winner'}}));
     matches.push(makeMatch(null,null,'Partido 4 — Perdedores',3,{waitForA:{matchIdx:0,result:'loser'},waitForB:{matchIdx:1,result:'loser'}}));
   }
-  return{id:idx,letter:zoneLetter(idx),name:'Zona '+zoneLetter(idx),size:ps.length,pairs:ps,matches,standings:[],qualified:[],closed:false};
+  return{id:idx,letter:zoneLetter(idx),name:'Zona '+zoneLetter(idx),size:ps.length,pairs:ps,matches,standings:[],qualified:[],closed:false,days:zoneDays(ps)};
 }
 function makeMatch(a,b,label,order,pending){return{id:uid(),teamA:a,teamB:b,label,order,sets:[],winner:null,status:'pending',schedule:null,pending:pending||null,editSets:null,editWinner:null}}
 function propagateZone(z,idx){
@@ -807,7 +847,7 @@ function renderZoneCard(z){
     :z.pairs.map((p,i)=>`<tr><td style="color:var(--text2)">${i+1}</td><td style="font-weight:600;font-size:13px">${esc(p.a)}<br><span style="color:var(--text2);font-size:11px">${esc(p.b)}</span></td><td>-</td><td>-</td><td>-</td></tr>`).join('');
   const matchRows=z.matches.map(m=>matchRowHTML(m)).join('');
   const qualLine=z.qualified.map((q,i)=>`<span>${['🥇','🥈','🥉'][i]} ${esc(q.a)}</span>`).join(' · ');
-  return`<div class="zone-card"><div class="zone-card-title"><span>${z.name} ${z.size===4?'<span class="badge badge-blue">4p</span>':''}</span>${z.closed?'<span class="badge badge-green">✓</span>':''}</div>
+  return`<div class="zone-card"><div class="zone-card-title"><span>${z.name} ${z.size===4?'<span class="badge badge-blue">4p</span>':''}${z.days&&z.days.length?` <span class="badge badge-blue" style="font-weight:600">📅 ${z.days.map(d=>DIA_ABBR[d]||d).join('/')}</span>`:''}</span>${z.closed?'<span class="badge badge-green">✓</span>':''}</div>
     <table style="margin-bottom:10px"><thead><tr><th>Pos</th><th>Pareja</th><th>G</th><th>Sets</th><th>Dif</th></tr></thead><tbody>${stRows}</tbody></table>
     ${matchRows}
     ${qualLine?`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:11px;font-weight:600;color:var(--text2)">${qualLine}</div>`:''}
@@ -854,6 +894,16 @@ function renderSupResultados(){
   S.zones.forEach(z=>{
     html+=`<div class="card"><div class="card-title">📋 ${z.name} ${z.size===4?'<span class="badge badge-blue">4p</span>':''} ${z.closed?'<span class="badge badge-green">✓</span>':''}</div>`;
     html+=z.matches.map((m,mi)=>renderSupZM(m,z.id,mi)).join('');
+    if(!zoneHasResults(z)){
+      html+=`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)"><div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">✏️ Editar zona (antes de cargar resultados)</div>`;
+      z.pairs.forEach(p=>{
+        html+=`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:7px 0;border-bottom:1px dashed var(--border)">
+          <div style="font-weight:600">${esc(p.a)} / ${esc(p.b)} <span class="badge badge-blue" style="font-weight:600;white-space:nowrap">📅 ${diasTexto(p)}</span></div>
+          <div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="openEditPair('${z.id}','${p.id}')">✏️ Editar</button><button class="btn btn-secondary btn-sm" onclick="openMovePair('${z.id}','${p.id}')">🔄 Mover</button></div>
+        </div>`;
+      });
+      html+=`</div>`;
+    }
     if(z.closed){
       const ql=z.qualified.map((q,i)=>`<span class="badge badge-green">${['🥇','🥈','🥉'][i]} ${esc(q.a)}</span>`).join(' ');
       html+=`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)"><div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Clasificados</div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px">${ql}</div><button class="btn btn-secondary btn-sm" onclick="reopenZone(${z.id})">✏️ Corregir zona</button></div>`;
@@ -917,7 +967,8 @@ const DROP_TEMPLATES={
   25:"1A - 3A 2B 2G - 1H - 1E - 2F - 2C - 1D - 1C - 2D - 2E - 1F - 1G - 2H - 2A - 1B -",
   26:"1A - 3A 2B 2G - 1H - 1E - 2F - 2C - 1D - 1C - 2D - 2E - 1F - 1G - 2H - 2A 3B 1B -",
   27:"1A - 2B 2C 1I - 1H - 1E - 2G - 2F - 1D - 1C - 2E - 2H - 1F - 1G - 2I - 2D 2A 1B -",
-  28:"1A - 2B 2C 1I - 1H - 1E - 2G - 2F - 1D - 1C - 3A 2E 2H - 1F - 1G - 2I - 2D 2A 1B -"
+  28:"1A - 2B 2C 1I - 1H - 1E - 2G - 2F - 1D - 1C - 3A 2E 2H - 1F - 1G - 2I - 2D 2A 1B -",
+  29:"1A - 2B 2C 1I - 1H - 1E - 2G - 2F 3B 1D - 1C - 3A 2E 2H - 1F - 1G - 2I - 2D 2A 1B -"
 };
 function dropFmtLabel(s){return(s&&s!=='-')?`${s[0]}° ${s.slice(1)}`:''}
 function buildDropFromTemplate(tokens,map){
@@ -1088,6 +1139,94 @@ function reopenZone(zId){
     recalcZone(z);
     await save();renderSupContent();toast('Zona reabierta ✓');
   });
+}
+
+// ═══════════════════════════════════
+// EDICIÓN DE ZONAS (antes de cargar resultados)
+// ═══════════════════════════════════
+function zoneHasResults(z){return z.matches.some(m=>m.status==='done')}
+function relinkZone(z){
+  z.pairs=z.pairs.map(p=>S.pairs.find(x=>x.id===p.id)||p);
+  const nz=buildZone(z.id,z.pairs);
+  z.size=z.pairs.length;z.matches=nz.matches;z.days=nz.days;z.standings=[];z.qualified=[];z.closed=false;
+  recalcZone(z);
+}
+function closeZoneEdit(){document.getElementById('zoneEditModal').style.display='none'}
+function openEditPair(zId,pairId){
+  const z=getZone(zId);if(!z)return;
+  if(zoneHasResults(z)){toast('Esta zona ya tiene resultados. No se puede editar.');return}
+  const p=z.pairs.find(x=>x.id===pairId);if(!p)return;
+  const days=p.days||[];
+  const chips=DIAS.map(d=>`<label style="display:inline-flex;align-items:center;gap:5px;background:rgba(79,195,247,.08);border:1px solid var(--border);border-radius:8px;padding:8px 12px;cursor:pointer;font-size:14px"><input type="checkbox" id="ed_day_${d}" ${days.includes(d)?'checked':''} style="width:16px;height:16px"/> ${d}</label>`).join('');
+  document.getElementById('zoneEditBody').innerHTML=`
+    <h2>✏️ Editar pareja</h2>
+    <p>${esc(z.name)}</p>
+    <div class="ig"><label>Jugador 1</label><input id="ed_a" value="${esc(p.a)}"/></div>
+    <div class="ig"><label>Jugador 2</label><input id="ed_b" value="${esc(p.b)}"/></div>
+    <div class="ig"><label>Días que pueden jugar (elegí 2)</label><div style="display:flex;gap:8px;flex-wrap:wrap">${chips}</div></div>
+    <div class="modal-btns">
+      <button class="btn btn-primary" onclick="savePairEdit('${zId}','${pairId}')">Guardar</button>
+      <button class="btn btn-secondary" onclick="closeZoneEdit()">Cancelar</button>
+    </div>`;
+  document.getElementById('zoneEditModal').style.display='flex';
+}
+async function savePairEdit(zId,pairId){
+  const z=getZone(zId);if(!z)return;
+  if(zoneHasResults(z)){toast('La zona ya tiene resultados.');closeZoneEdit();return}
+  const a=document.getElementById('ed_a').value.trim(),b=document.getElementById('ed_b').value.trim();
+  if(!a||!b){toast('Completá ambos jugadores');return}
+  const days=DIAS.filter(d=>document.getElementById('ed_day_'+d)?.checked);
+  if(days.length!==2){toast('Elegí exactamente 2 días');return}
+  const p=S.pairs.find(x=>x.id===pairId)||z.pairs.find(x=>x.id===pairId);
+  if(!p){toast('No se encontró la pareja');return}
+  p.a=a;p.b=b;p.days=days;
+  relinkZone(z);
+  await save();closeZoneEdit();renderSupContent();toast('✓ Pareja actualizada');
+}
+function openMovePair(zId,pairId){
+  const z=getZone(zId);if(!z)return;
+  if(zoneHasResults(z)){toast('Esta zona ya tiene resultados.');return}
+  const p=z.pairs.find(x=>x.id===pairId);if(!p)return;
+  const others=S.zones.filter(y=>y.id!==z.id);
+  const blocks=others.map(y=>{
+    const blocked=zoneHasResults(y);
+    const canMove=!blocked && z.size===4 && y.size===3;
+    const moveBtn=canMove?`<button class="btn btn-primary btn-sm" onclick="doMovePair('${z.id}','${pairId}','${y.id}')">➡️ Mover acá</button>`:'';
+    const dayTxt=(y.days&&y.days.length)?`📅 ${y.days.map(d=>DIA_ABBR[d]||d).join('/')}`:'';
+    const swapBtns=blocked
+      ?`<span style="color:var(--text2);font-size:12px">tiene resultados, no disponible</span>`
+      :y.pairs.map(q=>`<button class="btn btn-secondary btn-sm" onclick="doSwapPair('${z.id}','${pairId}','${y.id}','${q.id}')">🔄 ${esc(q.a)}/${esc(q.b)}</button>`).join(' ');
+    return`<div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px"><span style="font-weight:700">${esc(y.name)} <span class="badge badge-blue">${y.size}p</span> ${dayTxt}</span>${moveBtn}</div>
+      <div style="font-size:11px;color:var(--text2);margin-bottom:4px">Intercambiar con:</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">${swapBtns}</div>
+    </div>`;
+  }).join('');
+  document.getElementById('zoneEditBody').innerHTML=`
+    <h2>🔄 Mover / Intercambiar</h2>
+    <p><strong>${esc(p.a)} / ${esc(p.b)}</strong> · ${esc(z.name)}</p>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:10px">"Mover acá" aparece solo cuando las dos zonas quedan válidas (3 o 4 parejas). Si no, podés <strong>intercambiar</strong> con una pareja de la otra zona.</div>
+    ${blocks||'<p style="color:var(--text2)">No hay otras zonas.</p>'}
+    <div class="modal-btns"><button class="btn btn-secondary" onclick="closeZoneEdit()">Cerrar</button></div>`;
+  document.getElementById('zoneEditModal').style.display='flex';
+}
+async function doMovePair(srcId,pairId,dstId){
+  const src=getZone(srcId),dst=getZone(dstId);if(!src||!dst)return;
+  if(zoneHasResults(src)||zoneHasResults(dst)){toast('Una de las zonas ya tiene resultados.');return}
+  if(!(src.size===4&&dst.size===3)){toast('No se puede mover sin romper los tamaños (3 o 4).');return}
+  const i=src.pairs.findIndex(p=>p.id===pairId);if(i<0)return;
+  const [p]=src.pairs.splice(i,1);dst.pairs.push(p);
+  relinkZone(src);relinkZone(dst);
+  await save();closeZoneEdit();renderSupContent();toast('✓ Pareja movida');
+}
+async function doSwapPair(srcId,pairId,dstId,otherId){
+  const src=getZone(srcId),dst=getZone(dstId);if(!src||!dst)return;
+  if(zoneHasResults(src)||zoneHasResults(dst)){toast('Una de las zonas ya tiene resultados.');return}
+  const i=src.pairs.findIndex(p=>p.id===pairId),j=dst.pairs.findIndex(p=>p.id===otherId);
+  if(i<0||j<0)return;
+  const tmp=src.pairs[i];src.pairs[i]=dst.pairs[j];dst.pairs[j]=tmp;
+  relinkZone(src);relinkZone(dst);
+  await save();closeZoneEdit();renderSupContent();toast('✓ Parejas intercambiadas');
 }
 
 // ═══════════════════════════════════
