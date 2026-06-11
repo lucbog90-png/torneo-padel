@@ -324,6 +324,7 @@ tr:last-child td{border-bottom:none}
   <div class="modal" style="width:min(520px,100%);max-height:90vh;overflow-y:auto">
     <h2 style="color:#a855f7">📲 Publicar Zonas</h2>
     <p>Flyer listo para redes sociales</p>
+    <div id="pubDayBtns" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"></div>
     <img id="publishPreview" class="pub-preview" style="display:none"/>
     <div class="modal-btns">
       <button class="btn btn-pub" onclick="downloadFlyer()">⬇️ Descargar</button>
@@ -800,6 +801,7 @@ function recalcZone(z){
 // MATCH ROW HTML (compartido)
 // ═══════════════════════════════════
 function matchRowHTML(m){
+  const sch=m.schedule?`<div class="sch-chip">${m.schedule.day?`<span class="t">📆 ${esc(m.schedule.day)}</span>`:''}${m.schedule.time?`<span class="t">🕐 ${esc(m.schedule.time)}</span>`:''}${m.schedule.court?`<span class="c">🏟️ ${esc(m.schedule.court)}</span>`:''}</div>`:'';
   if(!m.teamA||!m.teamB){
     const known=m.teamA||m.teamB,knownA=!!m.teamA;
     let pl='⏳ Por definir';
@@ -813,10 +815,9 @@ function matchRowHTML(m){
         <div style="flex:1;text-align:left">${knownA?(kb||pb):pb}</div>
         <span style="background:rgba(18,24,36,.9);border-radius:5px;padding:2px 6px;color:var(--text2);font-weight:700;font-size:12px;flex-shrink:0">vs</span>
         <div style="flex:1;text-align:right">${!knownA?(kb||pb):pb}</div>
-      </div></div>`;
+      </div>${sch}</div>`;
   }
   const aW=m.winner===m.teamA.id,bW=m.winner===m.teamB.id;
-  const sch=m.schedule?`<div class="sch-chip">${m.schedule.day?`<span class="t">📆 ${esc(m.schedule.day)}</span>`:''}${m.schedule.time?`<span class="t">🕐 ${esc(m.schedule.time)}</span>`:''}${m.schedule.court?`<span class="c">🏟️ ${esc(m.schedule.court)}</span>`:''}</div>`:'';
   const scoreTxt=m.status==='done'?(m.sets.length?m.sets.map(s=>`${s.a}-${s.b}`).join(' '):'W.O.'):'vs';
   return`<div class="zone-match-row"><div class="zone-match-label">${esc(m.label)}</div>
     <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
@@ -1269,49 +1270,125 @@ function openReset(){showConfirm('⚠️ BORRAR TORNEO','Se eliminarán <strong>
 // ═══════════════════════════════════
 // PUBLISH FLYER
 // ═══════════════════════════════════
-function openPublish(){if(!S.zones.length){toast('Sin zonas para publicar');return}document.getElementById('publishModal').style.display='flex';generateFlyer()}
+function openPublish(){if(!S.zones.length){toast('Sin zonas para publicar');return}_pubDay=null;document.getElementById('publishModal').style.display='flex';renderPubDayBtns();generateFlyer()}
+let _pubDay=null;
+function normDay(s){return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')}
+function pubDays(){const set=new Set();S.zones.forEach(z=>z.matches.forEach(m=>{if(m.schedule&&m.schedule.day)DIAS.forEach(d=>{if(normDay(m.schedule.day).includes(normDay(d)))set.add(d)})}));return DIAS.filter(d=>set.has(d))}
+function renderPubDayBtns(){const el=document.getElementById('pubDayBtns');if(!el)return;const days=pubDays();let h=`<button class="btn btn-sm ${_pubDay===null?'btn-primary':'btn-secondary'}" onclick="setPubDay(null)">Todas las zonas</button>`;days.forEach(d=>{h+=`<button class="btn btn-sm ${_pubDay===d?'btn-primary':'btn-secondary'}" onclick="setPubDay('${d}')">📅 ${d}</button>`});el.innerHTML=h}
+function setPubDay(d){_pubDay=d;renderPubDayBtns();if(d)generateDayFlyer(d);else generateFlyer()}
 function truncate(s,n){return s.length>n?s.slice(0,n-1)+'…':s}
+function matchSidesCanvas(m){
+  if(m.teamA&&m.teamB)return{l:m.teamA.a+' / '+m.teamA.b,r:m.teamB.a+' / '+m.teamB.b,lW:m.status==='done'&&m.winner===m.teamA.id,rW:m.status==='done'&&m.winner===m.teamB.id,pend:false};
+  const lab=wf=>(wf.result==='winner'?'Gan. P':'Perd. P')+((wf.matchIdx||0)+1);
+  if(m.pending&&m.pending.waitForA)return{l:lab(m.pending.waitForA),r:lab(m.pending.waitForB),lW:false,rW:false,pend:true};
+  const known=m.teamA||m.teamB,knownA=!!m.teamA;
+  let pl='Por definir';
+  if(m.pending&&m.pending.waitFor==='winner')pl='Ganador P'+((m.pending.matchIdx||0)+1);
+  else if(m.pending&&m.pending.waitFor==='loser')pl='Perdedor P'+((m.pending.matchIdx||0)+1);
+  const ks=known?known.a+' / '+known.b:'Por definir';
+  return knownA?{l:ks,r:pl,lW:false,rW:false,pend:true}:{l:pl,r:ks,lW:false,rW:false,pend:true};
+}
+function flyerBg(ctx,W,H,then){
+  const plain=()=>{const g=ctx.createLinearGradient(0,0,W,H);g.addColorStop(0,'#0a1628');g.addColorStop(1,'#050d1a');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);then()};
+  if(S.bgDataUrl){const img=new Image();img.crossOrigin='anonymous';img.onload=()=>{ctx.drawImage(img,0,0,W,H);then()};img.onerror=plain;img.src=S.bgDataUrl}else plain();
+}
+function flyerAd(ctx,W,H,done){
+  if(S.adDataUrl){const ai=new Image();ai.crossOrigin='anonymous';ai.onload=()=>{const ar=ai.width/ai.height,ah=104,aw=Math.min(ah*ar,W-120);ctx.fillStyle='rgba(255,107,53,.08)';ctx.fillRect(0,H-122,W,116);ctx.drawImage(ai,(W-aw)/2,H-120,aw,ah);done()};ai.onerror=done;ai.src=S.adDataUrl}
+  else{ctx.fillStyle='rgba(255,107,53,.08)';ctx.fillRect(0,H-80,W,74);ctx.font='26px Rajdhani,Arial';ctx.fillStyle='#ff6b35';ctx.textAlign='center';ctx.fillText('🏟️  '+S.name.toUpperCase(),W/2,H-36);done()}
+}
+function flyerHeaderEndY(){return S.category?344:300}
+function flyerHeader(ctx,W,subtitle,then){
+  const drawTitles=()=>{
+    ctx.textAlign='center';
+    ctx.font=`bold 68px 'Bebas Neue',Impact,sans-serif`;ctx.fillStyle='#00e5a0';ctx.fillText(S.name.toUpperCase(),W/2,150);
+    let y=190;
+    if(S.category){ctx.font='36px Rajdhani,Arial';ctx.fillStyle='#ff6b35';ctx.fillText(S.category.toUpperCase(),W/2,y+10);y+=44}
+    ctx.font='28px Rajdhani,Arial';ctx.fillStyle='rgba(255,255,255,.5)';const dt=new Date().toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'long'});ctx.fillText(dt.toUpperCase(),W/2,y);y+=30;
+    ctx.strokeStyle='#00e5a0';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(60,y);ctx.lineTo(W-60,y);ctx.stroke();y+=44;
+    ctx.font='bold 42px Rajdhani,Arial';ctx.fillStyle='#4fc3f7';ctx.fillText(subtitle,W/2,y);y+=36;
+    then(y);
+  };
+  const lx=60,ly=30,ls=120;
+  if(S.logoDataUrl){const li=new Image();li.crossOrigin='anonymous';li.onload=()=>{ctx.save();ctx.beginPath();if(ctx.roundRect)ctx.roundRect(lx,ly,ls,ls,16);else ctx.rect(lx,ly,ls,ls);ctx.clip();ctx.drawImage(li,lx,ly,ls,ls);ctx.restore();drawTitles()};li.onerror=drawTitles;li.src=S.logoDataUrl}else drawTitles();
+}
 function generateFlyer(){
-  const W=1080,H=1350,canvas=document.getElementById('publishCanvas');
+  const W=1080,canvas=document.getElementById('publishCanvas');
+  const lh=48,th=50,zh=z=>th+z.matches.length*lh+14;
+  let contentH=0;
+  for(let i=0;i<S.zones.length;i+=2){const a=S.zones[i],b=S.zones[i+1];contentH+=Math.max(zh(a),b?zh(b):0)+14}
+  const startY=flyerHeaderEndY()+10;
+  const H=Math.max(1200,Math.ceil(startY+contentH+160));
   canvas.width=W;canvas.height=H;
   const ctx=canvas.getContext('2d');
-  const drawBg=()=>{if(S.bgDataUrl){const img=new Image();img.crossOrigin='anonymous';img.onload=()=>{ctx.drawImage(img,0,0,W,H);drawContent()};img.onerror=()=>{const g=ctx.createLinearGradient(0,0,W,H);g.addColorStop(0,'#0a1628');g.addColorStop(1,'#050d1a');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);drawContent()};img.src=S.bgDataUrl}else{const g=ctx.createLinearGradient(0,0,W,H);g.addColorStop(0,'#0a1628');g.addColorStop(1,'#050d1a');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);drawContent()}};
-  const drawContent=()=>{
+  flyerBg(ctx,W,H,()=>{
     const ov=ctx.createLinearGradient(0,0,0,H);ov.addColorStop(0,'rgba(0,0,0,.72)');ov.addColorStop(1,'rgba(0,0,0,.88)');ctx.fillStyle=ov;ctx.fillRect(0,0,W,H);
     ctx.fillStyle='#00e5a0';ctx.fillRect(0,0,W,6);ctx.fillStyle='#ff6b35';ctx.fillRect(0,H-6,W,6);
-    const doLogo=()=>{const lx=60,ly=30,ls=120;if(S.logoDataUrl){const li=new Image();li.crossOrigin='anonymous';li.onload=()=>{ctx.save();ctx.beginPath();if(ctx.roundRect)ctx.roundRect(lx,ly,ls,ls,16);else ctx.rect(lx,ly,ls,ls);ctx.clip();ctx.drawImage(li,lx,ly,ls,ls);ctx.restore();doTxt()};li.onerror=doTxt;li.src=S.logoDataUrl}else doTxt()};
-    const doTxt=()=>{
-      ctx.textAlign='center';ctx.font=`bold 68px 'Bebas Neue',Impact,sans-serif`;ctx.fillStyle='#00e5a0';ctx.fillText(S.name.toUpperCase(),W/2,150);
-      if(S.category){ctx.font='36px Rajdhani,Arial';ctx.fillStyle='#ff6b35';ctx.fillText(S.category.toUpperCase(),W/2,200)}
-      ctx.font='28px Rajdhani,Arial';ctx.fillStyle='rgba(255,255,255,.5)';const dt=new Date().toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'long'});ctx.fillText(dt.toUpperCase(),W/2,S.category?238:210);
-      ctx.strokeStyle='#00e5a0';ctx.lineWidth=2;const ly2=S.category?262:234;ctx.beginPath();ctx.moveTo(60,ly2);ctx.lineTo(W-60,ly2);ctx.stroke();
-      ctx.font='bold 42px Rajdhani,Arial';ctx.fillStyle='#4fc3f7';ctx.fillText('ZONAS DEL DÍA',W/2,ly2+46);
-      doZones(ly2+82);
-    };
-    const doZones=(sy)=>{
-      const pad=50,cw=(W-pad*2-16)/2;let col=0,ry=sy;
-      S.zones.forEach((z,zi)=>{const cx=col===0?pad:pad+cw+16,cy=ry,bh=drawZBox(ctx,z,cx,cy,cw);if(col===0)col=1;else{col=0;ry+=bh+14}if(zi===S.zones.length-1&&col===1)ry+=bh+14;});
-      doAd();
-    };
-    const doAd=()=>{if(S.adDataUrl){const ai=new Image();ai.crossOrigin='anonymous';ai.onload=()=>{const ar=ai.width/ai.height,ah=100,aw=Math.min(ah*ar,W-120);ctx.fillStyle='rgba(255,107,53,.08)';ctx.fillRect(0,H-118,W,112);ctx.drawImage(ai,(W-aw)/2,H-118+6,aw,ah);finalizeCanvas()};ai.onerror=finalizeCanvas;ai.src=S.adDataUrl}else{ctx.fillStyle='rgba(255,107,53,.08)';ctx.fillRect(0,H-80,W,74);ctx.font='26px Rajdhani,Arial';ctx.fillStyle='#ff6b35';ctx.textAlign='center';ctx.fillText('🏟️  TORNEO DE PÁDEL OFICIAL',W/2,H-36);finalizeCanvas()}};
-    doLogo();
-  };drawBg();
+    flyerHeader(ctx,W,'ZONAS DEL DÍA',(sy)=>{
+      const pad=50,gap=16,cw=(W-pad*2-gap)/2;let ry=sy+10;
+      for(let i=0;i<S.zones.length;i+=2){const z1=S.zones[i],z2=S.zones[i+1];const h1=drawZBox(ctx,z1,pad,ry,cw);let h2=0;if(z2)h2=drawZBox(ctx,z2,pad+cw+gap,ry,cw);ry+=Math.max(h1,h2)+14}
+      flyerAd(ctx,W,H,finalizeCanvas);
+    });
+  });
 }
 function drawZBox(ctx,z,x,y,w){
-  const lh=48,th=50,mc=z.matches.filter(m=>m.teamA&&m.teamB).length,bh=th+mc*lh+14;
+  const lh=48,th=50,mc=z.matches.length,bh=th+mc*lh+14;
   ctx.fillStyle='rgba(14,30,56,.88)';if(ctx.roundRect){ctx.beginPath();ctx.roundRect(x,y,w,bh,10);ctx.fill()}else ctx.fillRect(x,y,w,bh);
   ctx.strokeStyle='rgba(79,195,247,.4)';ctx.lineWidth=1.5;if(ctx.roundRect){ctx.beginPath();ctx.roundRect(x,y,w,bh,10);ctx.stroke()}else ctx.strokeRect(x,y,w,bh);
   ctx.fillStyle='rgba(79,195,247,.12)';ctx.fillRect(x,y,w,th);
-  ctx.font=`bold 26px 'Bebas Neue',Impact,sans-serif`;ctx.fillStyle='#4fc3f7';ctx.textAlign='center';ctx.fillText(z.name.toUpperCase(),x+w/2,y+th-12);
+  ctx.font=`bold 26px 'Bebas Neue',Impact,sans-serif`;ctx.fillStyle='#4fc3f7';ctx.textAlign='center';
+  const ttl=z.name.toUpperCase()+(z.days&&z.days.length?'  ·  '+z.days.map(d=>DIA_ABBR[d]||d).join('/'):'');
+  ctx.fillText(ttl,x+w/2,y+th-12);
   let my=y+th+6;
-  z.matches.filter(m=>m.teamA&&m.teamB).forEach(m=>{
-    const aW=m.status==='done'&&m.winner===m.teamA.id,bW=m.status==='done'&&m.winner===m.teamB.id;
-    if(m.schedule){const sd=[m.schedule.day,m.schedule.time].filter(Boolean).join(' ');ctx.font='17px Rajdhani,Arial';ctx.fillStyle='rgba(0,229,160,.6)';ctx.textAlign='left';ctx.fillText(`⏰ ${sd}${m.schedule.court?' · '+m.schedule.court:''}`,x+10,my+14)}
-    ctx.font=`${aW?'bold ':''} 18px Rajdhani,Arial`;ctx.fillStyle=aW?'#00e5a0':bW?'rgba(255,255,255,.4)':'rgba(255,255,255,.85)';ctx.textAlign='left';ctx.fillText(truncate(m.teamA.a+' / '+m.teamA.b,26),x+10,my+32);
-    ctx.font='bold 15px Arial';ctx.fillStyle='rgba(255,255,255,.25)';ctx.textAlign='center';ctx.fillText('vs',x+w/2,my+32);
-    ctx.font=`${bW?'bold ':''} 18px Rajdhani,Arial`;ctx.fillStyle=bW?'#00e5a0':aW?'rgba(255,255,255,.4)':'rgba(255,255,255,.85)';ctx.textAlign='right';ctx.fillText(truncate(m.teamB.a+' / '+m.teamB.b,26),x+w-10,my+32);
-    ctx.strokeStyle='rgba(255,255,255,.07)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x+10,my+lh-2);ctx.lineTo(x+w-10,my+lh-2);ctx.stroke();my+=lh;
-  });return bh;
+  z.matches.forEach(m=>{
+    const s=matchSidesCanvas(m);
+    if(m.schedule){const sd=[m.schedule.day,m.schedule.time].filter(Boolean).join(' ');ctx.font='15px Rajdhani,Arial';ctx.fillStyle='rgba(0,229,160,.65)';ctx.textAlign='left';ctx.fillText('⏰ '+truncate(sd+(m.schedule.court?' · '+m.schedule.court:''),34),x+10,my+13)}
+    const lc=s.lW?'#00e5a0':(s.rW?'rgba(255,255,255,.4)':(s.pend?'rgba(120,170,210,.9)':'rgba(255,255,255,.9)'));
+    const rc=s.rW?'#00e5a0':(s.lW?'rgba(255,255,255,.4)':(s.pend?'rgba(120,170,210,.9)':'rgba(255,255,255,.9)'));
+    ctx.font=`${s.lW?'bold ':''}17px Rajdhani,Arial`;ctx.fillStyle=lc;ctx.textAlign='left';ctx.fillText(truncate(s.l,22),x+10,my+33);
+    ctx.font='bold 14px Arial';ctx.fillStyle='rgba(255,255,255,.25)';ctx.textAlign='center';ctx.fillText('vs',x+w/2,my+33);
+    ctx.font=`${s.rW?'bold ':''}17px Rajdhani,Arial`;ctx.fillStyle=rc;ctx.textAlign='right';ctx.fillText(truncate(s.r,22),x+w-10,my+33);
+    ctx.strokeStyle='rgba(255,255,255,.07)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x+10,my+lh-2);ctx.lineTo(x+w-10,my+lh-2);ctx.stroke();
+    my+=lh;
+  });
+  return bh;
+}
+function dayMatchList(day){
+  const out=[];
+  S.zones.forEach(z=>z.matches.forEach(m=>{
+    if(m.schedule&&m.schedule.day&&normDay(m.schedule.day).includes(normDay(day))){
+      const s=matchSidesCanvas(m);
+      out.push({zone:z.name,label:m.label,l:s.l,r:s.r,time:m.schedule.time||'',court:m.schedule.court||''});
+    }
+  }));
+  return out;
+}
+function generateDayFlyer(day){
+  const W=1080,canvas=document.getElementById('publishCanvas');
+  const items=dayMatchList(day);
+  const startY=flyerHeaderEndY()+10,itemH=128;
+  const H=Math.max(1000,Math.ceil(startY+Math.max(items.length,1)*itemH+160));
+  canvas.width=W;canvas.height=H;
+  const ctx=canvas.getContext('2d');
+  flyerBg(ctx,W,H,()=>{
+    const ov=ctx.createLinearGradient(0,0,0,H);ov.addColorStop(0,'rgba(0,0,0,.72)');ov.addColorStop(1,'rgba(0,0,0,.88)');ctx.fillStyle=ov;ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#00e5a0';ctx.fillRect(0,0,W,6);ctx.fillStyle='#ff6b35';ctx.fillRect(0,H-6,W,6);
+    flyerHeader(ctx,W,'PARTIDOS · '+day.toUpperCase(),(sy)=>{
+      let y=sy+10;const pad=50,cw=W-pad*2;
+      if(!items.length){ctx.textAlign='center';ctx.font='30px Rajdhani,Arial';ctx.fillStyle='rgba(255,255,255,.6)';ctx.fillText('Sin partidos agendados para este día',W/2,y+60)}
+      items.forEach(it=>{
+        ctx.fillStyle='rgba(14,30,56,.88)';if(ctx.roundRect){ctx.beginPath();ctx.roundRect(pad,y,cw,itemH-12,12);ctx.fill()}else ctx.fillRect(pad,y,cw,itemH-12);
+        ctx.strokeStyle='rgba(79,195,247,.35)';ctx.lineWidth=1.5;if(ctx.roundRect){ctx.beginPath();ctx.roundRect(pad,y,cw,itemH-12,12);ctx.stroke()}else ctx.strokeRect(pad,y,cw,itemH-12);
+        ctx.textAlign='left';ctx.font='bold 22px Rajdhani,Arial';ctx.fillStyle='#4fc3f7';ctx.fillText(truncate(it.zone.toUpperCase()+' · '+it.label.toUpperCase(),36),pad+22,y+34);
+        const meta=[it.time?'🕐 '+it.time:'',it.court?'🏟️ '+it.court:''].filter(Boolean).join('   ');
+        if(meta){ctx.textAlign='right';ctx.font='20px Rajdhani,Arial';ctx.fillStyle='rgba(0,229,160,.85)';ctx.fillText(meta,pad+cw-22,y+34)}
+        ctx.textAlign='left';ctx.font='29px Rajdhani,Arial';ctx.fillStyle='#fff';ctx.fillText(truncate(it.l,30),pad+22,y+76);
+        ctx.font='bold 22px Rajdhani,Arial';ctx.fillStyle='#ff6b35';ctx.fillText('VS',pad+22,y+106);
+        ctx.font='29px Rajdhani,Arial';ctx.fillStyle='#fff';ctx.fillText(truncate(it.r,28),pad+80,y+106);
+        y+=itemH;
+      });
+      flyerAd(ctx,W,H,finalizeCanvas);
+    });
+  });
 }
 function finalizeCanvas(){
   const c=document.getElementById('publishCanvas'),p=document.getElementById('publishPreview');
@@ -1320,7 +1397,7 @@ function finalizeCanvas(){
 }
 function downloadFlyer(){
   const c=document.getElementById('publishCanvas');
-  try{const a=document.createElement('a');a.download=`${S.name.replace(/\s+/g,'_')}_zonas.png`;a.href=c.toDataURL('image/png');a.click();toast('✓ Descargada')}
+  try{const a=document.createElement('a');a.download=`${S.name.replace(/\s+/g,'_')}_${_pubDay?('partidos_'+normDay(_pubDay)):'zonas'}.png`;a.href=c.toDataURL('image/png');a.click();toast('✓ Descargada')}
   catch(e){toast('⚠️ No se pudo exportar la imagen',3500)}
 }
 
@@ -1342,74 +1419,68 @@ function dropFirstRoundList(){
   });
   return out;
 }
+function dropSide(team,label){return team?(team.a+' / '+team.b):(label?dropFmtLabel(label):'')}
 function generateDropFlyer(){
-  const W=1080,H=1920,canvas=document.getElementById('dropCanvas');
-  canvas.width=W;canvas.height=H;
+  const rounds=S.bracket;if(!rounds.length)return;
+  const R=rounds.length,m0=rounds[0].matches.length;
+  const colW=300,boxW=250,mBoxH=58,gap0=22,slot0=mBoxH+gap0;
+  const marginX=50,headerTop=210,footerH=130,champW=250;
+  const contentH=m0*mBoxH+(m0-1)*gap0;
+  const Wc=marginX+R*colW+champW+marginX;
+  const bracketTop=headerTop+20;
+  const Hc=Math.max(1000,Math.ceil(bracketTop+contentH+footerH+40));
+  const canvas=document.getElementById('dropCanvas');
+  canvas.width=Wc;canvas.height=Hc;
   const ctx=canvas.getContext('2d');
-  const list=dropFirstRoundList();
-  const rondaNombre=S.bracket[0]?.name||'DROP';
-
-  const drawBg=()=>{
-    if(S.bgDataUrl){const img=new Image();img.crossOrigin='anonymous';img.onload=()=>{ctx.drawImage(img,0,0,W,H);drawContent()};img.onerror=()=>{plainBg();drawContent()};img.src=S.bgDataUrl}
-    else{plainBg();drawContent()}
+  const centers=[];
+  centers[0]=[];for(let i=0;i<m0;i++)centers[0][i]=bracketTop+i*slot0+mBoxH/2;
+  for(let r=1;r<R;r++){centers[r]=[];const prev=centers[r-1];for(let i=0;i<rounds[r].matches.length;i++)centers[r][i]=(prev[2*i]+prev[2*i+1])/2}
+  const xCol=r=>marginX+r*colW;
+  const plain=()=>{const g=ctx.createLinearGradient(0,0,Wc,Hc);g.addColorStop(0,'#0a1628');g.addColorStop(1,'#050d1a');ctx.fillStyle=g;ctx.fillRect(0,0,Wc,Hc)};
+  const drawBox=(x,cy,m)=>{
+    const top=cy-mBoxH/2;
+    const aW=m.status==='done'&&m.winner===m.teamA?.id,bW=m.status==='done'&&m.winner===m.teamB?.id;
+    const la=dropSide(m.teamA,m.labelA),lb=m.isBye?'BYE':dropSide(m.teamB,m.labelB);
+    const empty=!la&&!lb;
+    ctx.fillStyle=empty?'rgba(14,30,56,.45)':'rgba(14,30,56,.9)';
+    if(ctx.roundRect){ctx.beginPath();ctx.roundRect(x,top,boxW,mBoxH,9);ctx.fill()}else ctx.fillRect(x,top,boxW,mBoxH);
+    ctx.strokeStyle='rgba(79,195,247,.4)';ctx.lineWidth=1.3;
+    if(ctx.roundRect){ctx.beginPath();ctx.roundRect(x,top,boxW,mBoxH,9);ctx.stroke()}else ctx.strokeRect(x,top,boxW,mBoxH);
+    ctx.beginPath();ctx.moveTo(x+8,cy);ctx.lineTo(x+boxW-8,cy);ctx.strokeStyle='rgba(255,255,255,.1)';ctx.lineWidth=1;ctx.stroke();
+    ctx.textAlign='left';
+    ctx.font=`${aW?'bold ':''}16px Rajdhani,Arial`;ctx.fillStyle=aW?'#00e5a0':(bW?'rgba(255,255,255,.4)':'rgba(255,255,255,.9)');ctx.fillText(truncate(la,24),x+12,top+22);
+    ctx.font=`${bW?'bold ':''}16px Rajdhani,Arial`;ctx.fillStyle=m.isBye?'#ffd700':(bW?'#00e5a0':(aW?'rgba(255,255,255,.4)':'rgba(255,255,255,.9)'));ctx.fillText(truncate(lb,24),x+12,top+44);
   };
-  const plainBg=()=>{const g=ctx.createLinearGradient(0,0,W,H);g.addColorStop(0,'#0a1628');g.addColorStop(1,'#050d1a');ctx.fillStyle=g;ctx.fillRect(0,0,W,H)};
-
-  const drawContent=()=>{
-    const ov=ctx.createLinearGradient(0,0,0,H);ov.addColorStop(0,'rgba(0,0,0,.78)');ov.addColorStop(1,'rgba(0,0,0,.9)');ctx.fillStyle=ov;ctx.fillRect(0,0,W,H);
-    ctx.fillStyle='#00e5a0';ctx.fillRect(0,0,W,8);ctx.fillStyle='#ff6b35';ctx.fillRect(0,H-8,W,8);
-
-    const doLogo=()=>{const lx=W/2-70,ly=50,ls=140;
-      if(S.logoDataUrl){const li=new Image();li.crossOrigin='anonymous';li.onload=()=>{ctx.save();ctx.beginPath();if(ctx.roundRect)ctx.roundRect(lx,ly,ls,ls,20);else ctx.rect(lx,ly,ls,ls);ctx.clip();ctx.drawImage(li,lx,ly,ls,ls);ctx.restore();doTxt()};li.onerror=doTxt;li.src=S.logoDataUrl}
-      else doTxt();
-    };
-    const doTxt=()=>{
-      ctx.textAlign='center';
-      ctx.font=`bold 72px 'Bebas Neue',Impact,sans-serif`;ctx.fillStyle='#00e5a0';ctx.fillText(S.name.toUpperCase(),W/2,275);
-      if(S.category){ctx.font='40px Rajdhani,Arial';ctx.fillStyle='#ff6b35';ctx.fillText(S.category.toUpperCase(),W/2,330)}
-      ctx.font=`bold 56px 'Bebas Neue',Impact,sans-serif`;ctx.fillStyle='#4fc3f7';ctx.fillText('🎾 '+rondaNombre+' · CRUCES',W/2,S.category?410:380);
-      ctx.font='30px Rajdhani,Arial';ctx.fillStyle='rgba(255,255,255,.55)';
-      const dt=new Date().toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'long'});
-      ctx.fillText(dt.toUpperCase(),W/2,S.category?460:430);
-      const topY=S.category?500:470;
-      ctx.strokeStyle='#00e5a0';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(60,topY);ctx.lineTo(W-60,topY);ctx.stroke();
-      drawList(topY+30);
-    };
-    const drawList=(sy)=>{
-      const footer=140;
-      const avail=H-sy-footer;
-      const n=Math.max(list.length,1);
-      const bh=Math.min(190,avail/n);
-      let y=sy;let num=1;
-      list.forEach(it=>{
-        const cx=60,cw=W-120;
-        ctx.fillStyle='rgba(14,30,56,.85)';
-        if(ctx.roundRect){ctx.beginPath();ctx.roundRect(cx,y+6,cw,bh-12,14);ctx.fill()}else ctx.fillRect(cx,y+6,cw,bh-12);
-        ctx.strokeStyle='rgba(79,195,247,.35)';ctx.lineWidth=1.5;
-        if(ctx.roundRect){ctx.beginPath();ctx.roundRect(cx,y+6,cw,bh-12,14);ctx.stroke()}else ctx.strokeRect(cx,y+6,cw,bh-12);
-        if(it.bye){
-          ctx.textAlign='left';ctx.font=`bold 30px 'Bebas Neue',Impact,sans-serif`;ctx.fillStyle='#ffd700';ctx.fillText(`BYE · pasa directo`,cx+28,y+bh/2-4);
-          ctx.font='32px Rajdhani,Arial';ctx.fillStyle='#fff';ctx.fillText(truncate(it.a.a+' / '+it.a.b,34),cx+28,y+bh/2+34);
-        }else{
-          ctx.textAlign='left';ctx.font=`bold 30px 'Bebas Neue',Impact,sans-serif`;ctx.fillStyle='#4fc3f7';ctx.fillText(`PARTIDO ${num}`,cx+28,y+42);
-          ctx.font='34px Rajdhani,Arial';ctx.fillStyle='#fff';
-          ctx.fillText(truncate(`${it.a.a} / ${it.a.b}`,32),cx+28,y+90);
-          ctx.font='bold 26px Rajdhani,Arial';ctx.fillStyle='#ff6b35';ctx.fillText('VS',cx+28,y+126);
-          ctx.font='34px Rajdhani,Arial';ctx.fillStyle='#fff';
-          ctx.fillText(truncate(`${it.b.a} / ${it.b.b}`,32),cx+90,y+126);
-          num++;
-        }
-        y+=bh;
-      });
-      doFooter();
-    };
-    const doFooter=()=>{
-      if(S.adDataUrl){const ai=new Image();ai.crossOrigin='anonymous';ai.onload=()=>{const ar=ai.width/ai.height,ah=110,aw=Math.min(ah*ar,W-120);ctx.fillStyle='rgba(255,107,53,.08)';ctx.fillRect(0,H-130,W,120);ctx.drawImage(ai,(W-aw)/2,H-128,aw,ah);finalizeDrop()};ai.onerror=finalizeDrop;ai.src=S.adDataUrl}
-      else{ctx.fillStyle='rgba(255,107,53,.08)';ctx.fillRect(0,H-110,W,100);ctx.font='32px Rajdhani,Arial';ctx.fillStyle='#ff6b35';ctx.textAlign='center';ctx.fillText('🏟️ '+S.name.toUpperCase(),W/2,H-46);finalizeDrop()}
-    };
-    doLogo();
+  const draw=()=>{
+    const ov=ctx.createLinearGradient(0,0,0,Hc);ov.addColorStop(0,'rgba(0,0,0,.8)');ov.addColorStop(1,'rgba(0,0,0,.9)');ctx.fillStyle=ov;ctx.fillRect(0,0,Wc,Hc);
+    ctx.fillStyle='#00e5a0';ctx.fillRect(0,0,Wc,7);ctx.fillStyle='#ff6b35';ctx.fillRect(0,Hc-7,Wc,7);
+    ctx.textAlign='center';
+    ctx.font=`bold 58px 'Bebas Neue',Impact,sans-serif`;ctx.fillStyle='#00e5a0';ctx.fillText(S.name.toUpperCase(),Wc/2,90);
+    ctx.font=`bold 40px 'Bebas Neue',Impact,sans-serif`;ctx.fillStyle='#4fc3f7';ctx.fillText('🏆 DROP · LLAVE COMPLETA'+(S.category?' · '+S.category.toUpperCase():''),Wc/2,140);
+    ctx.font='26px Rajdhani,Arial';ctx.fillStyle='rgba(255,255,255,.5)';const dt=new Date().toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'long'});ctx.fillText(dt.toUpperCase(),Wc/2,178);
+    for(let r=0;r<R;r++){ctx.textAlign='center';ctx.font='bold 22px Rajdhani,Arial';ctx.fillStyle='rgba(79,195,247,.85)';ctx.fillText((rounds[r].name||'').toUpperCase(),xCol(r)+boxW/2,headerTop+6)}
+    ctx.strokeStyle='rgba(79,195,247,.35)';ctx.lineWidth=1.5;
+    for(let r=0;r<R-1;r++){
+      const x1=xCol(r)+boxW,x2=xCol(r+1),midX=(x1+x2)/2;
+      for(let p=0;p<rounds[r+1].matches.length;p++){
+        const c1=centers[r][2*p],c2=centers[r][2*p+1],pc=centers[r+1][p];
+        ctx.beginPath();ctx.moveTo(x1,c1);ctx.lineTo(midX,c1);ctx.moveTo(x1,c2);ctx.lineTo(midX,c2);ctx.moveTo(midX,c1);ctx.lineTo(midX,c2);ctx.moveTo(midX,pc);ctx.lineTo(x2,pc);ctx.stroke();
+      }
+    }
+    for(let r=0;r<R;r++)for(let i=0;i<rounds[r].matches.length;i++)drawBox(xCol(r),centers[r][i],rounds[r].matches[i]);
+    const fin=rounds[R-1].matches[0];
+    const champ=fin&&fin.winner?(fin.winner===fin.teamA?.id?fin.teamA:fin.teamB):null;
+    const cxC=xCol(R-1)+boxW+30,cyC=centers[R-1][0],cwC=champW-50;
+    ctx.beginPath();ctx.moveTo(xCol(R-1)+boxW,cyC);ctx.lineTo(cxC,cyC);ctx.strokeStyle='#ffd700';ctx.lineWidth=2;ctx.stroke();
+    ctx.fillStyle='rgba(255,215,0,.12)';if(ctx.roundRect){ctx.beginPath();ctx.roundRect(cxC,cyC-40,cwC,80,10);ctx.fill()}else ctx.fillRect(cxC,cyC-40,cwC,80);
+    ctx.strokeStyle='#ffd700';ctx.lineWidth=2;if(ctx.roundRect){ctx.beginPath();ctx.roundRect(cxC,cyC-40,cwC,80,10);ctx.stroke()}else ctx.strokeRect(cxC,cyC-40,cwC,80);
+    ctx.textAlign='center';ctx.font=`bold 20px 'Bebas Neue',Impact,sans-serif`;ctx.fillStyle='#ffd700';ctx.fillText('🏆 CAMPEÓN',cxC+cwC/2,cyC-8);
+    ctx.font='18px Rajdhani,Arial';ctx.fillStyle='#fff';ctx.fillText(champ?truncate(champ.a+' / '+champ.b,22):'A definir',cxC+cwC/2,cyC+20);
+    if(S.adDataUrl){const ai=new Image();ai.crossOrigin='anonymous';ai.onload=()=>{const ar=ai.width/ai.height,ah=96,aw=Math.min(ah*ar,Wc-120);ctx.fillStyle='rgba(255,107,53,.08)';ctx.fillRect(0,Hc-118,Wc,110);ctx.drawImage(ai,(Wc-aw)/2,Hc-114,aw,ah);finalizeDrop()};ai.onerror=finalizeDrop;ai.src=S.adDataUrl}
+    else{ctx.fillStyle='rgba(255,107,53,.08)';ctx.fillRect(0,Hc-80,Wc,72);ctx.font='28px Rajdhani,Arial';ctx.fillStyle='#ff6b35';ctx.textAlign='center';ctx.fillText('🏟️ '+S.name.toUpperCase(),Wc/2,Hc-38);finalizeDrop()}
   };
-  drawBg();
+  if(S.bgDataUrl){const img=new Image();img.crossOrigin='anonymous';img.onload=()=>{ctx.drawImage(img,0,0,Wc,Hc);draw()};img.onerror=()=>{plain();draw()};img.src=S.bgDataUrl}
+  else{plain();draw()}
 }
 function finalizeDrop(){
   const c=document.getElementById('dropCanvas'),p=document.getElementById('dropPreview');
