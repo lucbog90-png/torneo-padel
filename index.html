@@ -584,7 +584,7 @@ function goPlayers(){
 }
 function enterSup(){
   stopRefresh();showScreen('supScreen');applyVisuals();
-  if(S.started)enableSTab('resultados');
+  if(S.started){enableSTab('resultados');if(!S.bracketBuilt){refreshDrop();save();}}
   if(S.bracketBuilt)enableSTab('bracket');
   showSTab('torneo');
 }
