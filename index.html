@@ -484,26 +484,39 @@ function adItems(){
   });
   return items;
 }
+let _adRO=null;
 function renderAdBanners(){
+  if(_adRO){_adRO.disconnect();_adRO=null}
   const items=adItems();
   const slots=[{id:'adContent',ph:'<span style="font-size:18px">📢</span><span class="ad-text">ZONA DE PUBLICIDAD</span>'},{id:'playerAdContent',ph:'<span style="font-size:18px">📢</span><span class="ad-text">ZONA DE PUBLICIDAD</span>'}];
   if(!items.length){slots.forEach(s=>{const el=document.getElementById(s.id);if(el)el.innerHTML=s.ph});return}
   const one=items.map(it=>it.type==='img'?`<img class="ad-img" src="${esc(it.src)}"/>`:`<span class="ad-text">📢 ${esc(it.text)}</span>`).join('');
+  if(typeof ResizeObserver!=='undefined')_adRO=new ResizeObserver(es=>es.forEach(e=>e.target.__decide&&e.target.__decide()));
   slots.forEach(s=>{
     const el=document.getElementById(s.id);if(!el)return;
     el.innerHTML=`<div class="ad-marquee"><div class="ad-track">${one}</div></div>`;
     const marquee=el.querySelector('.ad-marquee'),track=el.querySelector('.ad-track');
     const decide=()=>{
-      if(!marquee||!track)return;
-      if(track.scrollWidth>marquee.clientWidth+4){
-        if(track.dataset.dup!=='1'){track.innerHTML=one+one;track.dataset.dup='1'}
+      if(!marquee||!track||!marquee.clientWidth)return;
+      const dup=track.dataset.dup==='1';
+      const oneW=dup?track.scrollWidth/2:track.scrollWidth;
+      const need=oneW>marquee.clientWidth+4;
+      if(need&&track.dataset.mode!=='scroll'){
+        if(!dup){track.innerHTML=one+one;track.dataset.dup='1'}
         marquee.classList.add('scrolling');track.classList.add('ad-scroll');
-        track.style.animationDuration=Math.max(16,Math.round(track.scrollWidth/120))+'s';
-      }else{marquee.classList.remove('scrolling');track.classList.remove('ad-scroll')}
+        track.style.animationDuration=Math.max(16,Math.round((track.scrollWidth/2)/60))+'s';
+        track.dataset.mode='scroll';
+      }else if(!need&&track.dataset.mode!=='static'){
+        if(dup){track.innerHTML=one;track.dataset.dup='0'}
+        marquee.classList.remove('scrolling');track.classList.remove('ad-scroll');
+        track.dataset.mode='static';
+      }
     };
+    marquee.__decide=decide;
     decide();
     el.querySelectorAll('img').forEach(im=>{if(!im.complete)im.addEventListener('load',decide,{once:true})});
-    setTimeout(decide,400);
+    if(_adRO)_adRO.observe(marquee);
+    setTimeout(decide,500);setTimeout(decide,1500);
   });
 }
 
