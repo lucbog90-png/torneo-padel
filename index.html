@@ -164,7 +164,7 @@ tr:last-child td{border-bottom:none}
 .ad-set{display:inline-flex;align-items:center;gap:40px;padding-right:40px;flex-shrink:0}
 .ad-set img.ad-img{height:74px;max-height:74px;width:auto;max-width:none;object-fit:contain;border-radius:6px}
 .ad-set .ad-text{font-size:18px;color:var(--accent2);font-weight:700;white-space:nowrap;letter-spacing:1px}
-@keyframes adscroll{from{transform:translateX(0)}to{transform:translateX(var(--ad-shift,-50%))}}
+@keyframes adscroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
 .bg-hint{position:fixed;bottom:calc(84px + var(--safe-bot));left:12px;z-index:91;background:rgba(0,0,0,.65);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:10px;color:var(--text2);cursor:pointer;display:flex;align-items:center;gap:5px}
 
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:300;display:flex;align-items:center;justify-content:center;padding:16px}
@@ -484,31 +484,15 @@ function adItems(){
   });
   return items;
 }
-let _adRO=null;
 function renderAdBanners(){
-  if(_adRO){_adRO.disconnect();_adRO=null}
   const items=adItems();
   const slots=[{id:'adContent',ph:'<span style="font-size:18px">📢</span><span class="ad-text">ZONA DE PUBLICIDAD</span>'},{id:'playerAdContent',ph:'<span style="font-size:18px">📢</span><span class="ad-text">ZONA DE PUBLICIDAD</span>'}];
   if(!items.length){slots.forEach(s=>{const el=document.getElementById(s.id);if(el)el.innerHTML=s.ph});return}
   const one=items.map(it=>it.type==='img'?`<img class="ad-img" src="${esc(it.src)}"/>`:`<span class="ad-text">📢 ${esc(it.text)}</span>`).join('');
   const setHtml=`<div class="ad-set">${one}</div>`;
-  if(typeof ResizeObserver!=='undefined')_adRO=new ResizeObserver(es=>es.forEach(e=>e.target.__sync&&e.target.__sync()));
-  slots.forEach(s=>{
-    const el=document.getElementById(s.id);if(!el)return;
-    el.innerHTML=`<div class="ad-marquee"><div class="ad-track">${setHtml}${setHtml}</div></div>`;
-    const track=el.querySelector('.ad-track'),set=track.querySelector('.ad-set');
-    const sync=()=>{
-      if(!set)return;const w=set.offsetWidth;if(!w)return;
-      if(track.dataset.w===''+w)return;track.dataset.w=''+w;
-      track.style.setProperty('--ad-shift','-'+w+'px');
-      track.style.animationDuration=Math.max(8,Math.round(w/110))+'s';
-      track.classList.add('ad-go');
-    };
-    set.__sync=sync;sync();
-    el.querySelectorAll('img').forEach(im=>{if(!im.complete)im.addEventListener('load',sync,{once:true})});
-    if(_adRO)_adRO.observe(set);
-    setTimeout(sync,400);setTimeout(sync,1200);
-  });
+  const dur=Math.max(14,items.length*4);
+  const html=`<div class="ad-marquee"><div class="ad-track ad-go" style="animation-duration:${dur}s">${setHtml}${setHtml}</div></div>`;
+  slots.forEach(s=>{const el=document.getElementById(s.id);if(el)el.innerHTML=html});
 }
 
 // ═══════════════════════════════════
@@ -785,8 +769,11 @@ async function startTournament(){
   S.zones=[];let idx=0,zi=0;
   sizes.forEach(sz=>{const ps=ordered.slice(idx,idx+sz);idx+=sz;S.zones.push(buildZone(zi++,ps))});
   S.zones.forEach(z=>recalcZone(z));
-  S.started=true;await save();
+  S.started=true;
+  refreshDrop();
+  await save();
   enableSTab('resultados');enablePTab('resultados');
+  if(S.bracketBuilt){enableSTab('bracket');enablePTab('bracket');}
   showSTab('resultados');toast('¡Torneo iniciado! ✓',3000);
 }
 // Días en común de una zona (intersección de los días de sus parejas).
@@ -917,7 +904,7 @@ function renderBracketTab(){
   const rounds=S.bracket.map(r=>{
     const slots=r.matches.map(m=>{
       const aW=m.winner===m.teamA?.id,bW=m.winner===m.teamB?.id;
-      const mk=(team,label,isW)=>team?`<div class="drop-team ${isW?'winner':''}">${label?`<span class="drop-seed">${esc(label)}</span>`:''}<div class="drop-team-names"><div class="drop-p1">${esc(team.a)}</div><div class="drop-p2">${esc(team.b)}</div></div>${m.sets.length?`<span class="drop-score ${isW?'ws':''}">${m.sets.map(s=>isW===aW?s.a:s.b).join(' ')}</span>`:''}</div>`:`<div class="drop-team empty-team"><span>— Espera —</span></div>`;
+      const mk=(team,label,isW)=>team?`<div class="drop-team ${isW?'winner':''}">${label?`<span class="drop-seed">${esc(label)}</span>`:''}<div class="drop-team-names"><div class="drop-p1">${esc(team.a)}</div><div class="drop-p2">${esc(team.b)}</div></div>${m.sets.length?`<span class="drop-score ${isW?'ws':''}">${m.sets.map(s=>isW===aW?s.a:s.b).join(' ')}</span>`:''}</div>`:(label?`<div class="drop-team empty-team"><span class="drop-seed" style="opacity:.9">${esc(label)}</span><span style="font-size:10px;color:var(--text2);margin-left:6px">por definir</span></div>`:`<div class="drop-team empty-team"><span>— Espera —</span></div>`);
       const tA=mk(m.teamA,m.labelA,aW);
       const tB=m.isBye?`<div class="drop-team bye-team"><span>— BYE —</span></div>`:mk(m.teamB,m.labelB,bW);
       const sch=m.schedule?`<div class="drop-sch">${m.schedule.day?`<span class="dt">📆 ${esc(m.schedule.day)}</span>`:''}${m.schedule.time?`<span class="dt">🕐 ${esc(m.schedule.time)}</span>`:''}${m.schedule.court?`<span class="dc">🏟️ ${esc(m.schedule.court)}</span>`:''}</div>`:'';
@@ -1064,6 +1051,38 @@ async function buildDrop(){
   S.bracket=rounds;S.bracketBuilt=true;await save();
   enableSTab('bracket');enablePTab('bracket');showSTab('bracket');toast('¡Drop generado!');
 }
+// Arma el drop con las posiciones (1°A, 2°B...) usando los clasificados que ya haya.
+// Las posiciones sin definir quedan como etiqueta; se completan solas al cerrar zonas.
+function buildDropBracket(){
+  const map={};
+  S.zones.forEach(z=>{(z.qualified||[]).forEach((pair,i)=>{map[`${i+1}${z.letter}`]=pair})});
+  const N=S.pairs.length;const tpl=DROP_TEMPLATES[N];
+  if(tpl)return buildDropFromTemplate(tpl.trim().split(/\s+/),map);
+  return buildDropGenericPreview(map);
+}
+function buildDropGenericPreview(map){
+  const byPos=[];
+  for(let p=0;p<3;p++)S.zones.forEach(z=>{const cupos=z.size===4?3:2;if(p<cupos)byPos.push({pair:map[`${p+1}${z.letter}`]||null,label:`${p+1}° ${z.letter}`})});
+  if(byPos.length<2)return null;
+  let size=1;while(size<byPos.length)size*=2;
+  const seeds=seededBracket(byPos,size);
+  const first=[];
+  for(let i=0;i<size;i+=2){const a=seeds[i],b=seeds[i+1];const realBye=!!(a&&a.pair&&!b);first.push({id:uid(),teamA:a?.pair||null,labelA:a?.label||'',teamB:b?.pair||null,labelB:b?.label||'',sets:[],winner:realBye?a.pair.id:null,status:realBye?'done':'pending',schedule:null,isBye:realBye})}
+  const rounds=[{name:roundName(size/2),matches:first}];
+  let cur=size/2;while(cur>1){cur/=2;const em=[];for(let i=0;i<cur;i++)em.push({id:uid(),teamA:null,teamB:null,labelA:'',labelB:'',sets:[],winner:null,status:'pending',schedule:null,isBye:false});rounds.push({name:roundName(cur),matches:em})}
+  propByes(rounds);
+  return rounds;
+}
+function refreshDrop(){
+  if(!S.started||!S.zones.length)return;
+  if(S.bracket&&S.bracket.length&&S.bracket.some(r=>r.matches.some(m=>m.status==='done'&&!m.isBye)))return;
+  const rounds=buildDropBracket();
+  if(!rounds||!rounds.length)return;
+  if(S.bracket&&S.bracket.length){
+    rounds.forEach((rd,ri)=>rd.matches.forEach((m,mi)=>{const old=S.bracket[ri]&&S.bracket[ri].matches[mi];if(old&&old.schedule)m.schedule=old.schedule;}));
+  }
+  S.bracket=rounds;S.bracketBuilt=true;
+}
 function seededBracket(cl,size){const s=new Array(size).fill(null);const p=bPos(size);cl.forEach((c,i)=>{if(p[i]!==undefined)s[p[i]]=c});return s}
 function bPos(size){if(size===1)return[0];const h=size/2;const t=bPos(h);const b=bPos(h).map(p=>p+h);const r=[];for(let i=0;i<h;i++){r.push(t[i]);r.push(b[i])}return r}
 function propByes(rounds){rounds[0].matches.forEach((m,mi)=>{if(m.isBye&&m.teamA&&rounds[1]){const nm=Math.floor(mi/2);rounds[1].matches[nm][mi%2===0?'teamA':'teamB']=m.teamA;rounds[1].matches[nm][mi%2===0?'labelA':'labelB']=m.labelA}})}
@@ -1159,7 +1178,7 @@ async function saveZM(zId,mId){
   const sch=getSchVal(mId,'z');if(sch)m.schedule=sch;
   if(!m.editWinner){toast('Seleccioná el ganador');return}
   m.sets=sets;m.winner=m.editWinner;m.status='done';delete m.editSets;delete m.editWinner;
-  const z=getZone(zId);propagateZone(z,getZMi(z,mId));recalcZone(z);
+  const z=getZone(zId);propagateZone(z,getZMi(z,mId));recalcZone(z);refreshDrop();
   await save();renderSupContent();toast('✓ Guardado');
 }
 async function saveZSchedule(zId,mId){
@@ -1175,7 +1194,7 @@ function reopenZM(zId,mId){
   const z=getZone(zId);const mi=getZMi(z,mId);
   m.editSets=[...m.sets];m.editWinner=m.winner;m.status='pending';m.winner=null;m.sets=[];
   z.matches.forEach((dep,di)=>{if(di<=mi)return;const dp=dep.pending;if(!dp)return;const aff=(dp.waitFor&&dp.matchIdx===mi)||(dp.waitForA?.matchIdx===mi)||(dp.waitForB?.matchIdx===mi);if(aff){dep.status='pending';dep.winner=null;dep.sets=[];dep.editSets=null;dep.editWinner=null;if(dp.waitFor)dep[dp.slot]=null;if(dp.waitForA?.matchIdx===mi)dep.teamA=null;if(dp.waitForB?.matchIdx===mi)dep.teamB=null;}});
-  recalcZone(z);renderSupContent();
+  recalcZone(z);refreshDrop();renderSupContent();
 }
 function reopenZone(zId){
   showConfirm('✏️ CORREGIR ZONA','Se reabrirá la zona y se borrarán los clasificados.','var(--accent3)','Sí, reabrir',async()=>{
