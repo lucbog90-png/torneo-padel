@@ -159,10 +159,11 @@ tr:last-child td{border-bottom:none}
 .ad-img{max-height:84px;max-width:80vw;object-fit:contain}
 .ad-text{color:var(--accent2);font-weight:700;font-size:14px;letter-spacing:2px;text-transform:uppercase}
 .ad-marquee{width:100%;overflow:hidden;display:flex;justify-content:flex-start}
-.ad-track{display:inline-flex;align-items:center;gap:40px;white-space:nowrap;will-change:transform}
+.ad-track{display:inline-flex;flex-shrink:0;will-change:transform}
 .ad-track.ad-go{animation:adscroll linear infinite}
-.ad-track img.ad-img{height:74px;max-height:74px;width:auto;max-width:none;object-fit:contain;border-radius:6px}
-.ad-track .ad-text{font-size:18px;color:var(--accent2);font-weight:700;white-space:nowrap;letter-spacing:1px}
+.ad-set{display:inline-flex;align-items:center;gap:40px;padding-right:40px;flex-shrink:0}
+.ad-set img.ad-img{height:74px;max-height:74px;width:auto;max-width:none;object-fit:contain;border-radius:6px}
+.ad-set .ad-text{font-size:18px;color:var(--accent2);font-weight:700;white-space:nowrap;letter-spacing:1px}
 @keyframes adscroll{from{transform:translateX(0)}to{transform:translateX(var(--ad-shift,-50%))}}
 .bg-hint{position:fixed;bottom:calc(84px + var(--safe-bot));left:12px;z-index:91;background:rgba(0,0,0,.65);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:10px;color:var(--text2);cursor:pointer;display:flex;align-items:center;gap:5px}
 
@@ -490,21 +491,22 @@ function renderAdBanners(){
   const slots=[{id:'adContent',ph:'<span style="font-size:18px">📢</span><span class="ad-text">ZONA DE PUBLICIDAD</span>'},{id:'playerAdContent',ph:'<span style="font-size:18px">📢</span><span class="ad-text">ZONA DE PUBLICIDAD</span>'}];
   if(!items.length){slots.forEach(s=>{const el=document.getElementById(s.id);if(el)el.innerHTML=s.ph});return}
   const one=items.map(it=>it.type==='img'?`<img class="ad-img" src="${esc(it.src)}"/>`:`<span class="ad-text">📢 ${esc(it.text)}</span>`).join('');
+  const setHtml=`<div class="ad-set">${one}</div>`;
   if(typeof ResizeObserver!=='undefined')_adRO=new ResizeObserver(es=>es.forEach(e=>e.target.__sync&&e.target.__sync()));
   slots.forEach(s=>{
     const el=document.getElementById(s.id);if(!el)return;
-    el.innerHTML=`<div class="ad-marquee"><div class="ad-track">${one}${one}</div></div>`;
-    const track=el.querySelector('.ad-track');
+    el.innerHTML=`<div class="ad-marquee"><div class="ad-track">${setHtml}${setHtml}</div></div>`;
+    const track=el.querySelector('.ad-track'),set=track.querySelector('.ad-set');
     const sync=()=>{
-      if(!track)return;const sw=track.scrollWidth;if(!sw)return;
-      if(track.dataset.sw===''+sw)return;track.dataset.sw=''+sw;
-      track.style.setProperty('--ad-shift','-'+(sw/2+20)+'px');
-      track.style.animationDuration=Math.max(12,Math.round((sw/2)/70))+'s';
+      if(!set)return;const w=set.offsetWidth;if(!w)return;
+      if(track.dataset.w===''+w)return;track.dataset.w=''+w;
+      track.style.setProperty('--ad-shift','-'+w+'px');
+      track.style.animationDuration=Math.max(8,Math.round(w/110))+'s';
       track.classList.add('ad-go');
     };
-    track.__sync=sync;sync();
+    set.__sync=sync;sync();
     el.querySelectorAll('img').forEach(im=>{if(!im.complete)im.addEventListener('load',sync,{once:true})});
-    if(_adRO)_adRO.observe(track);
+    if(_adRO)_adRO.observe(set);
     setTimeout(sync,400);setTimeout(sync,1200);
   });
 }
