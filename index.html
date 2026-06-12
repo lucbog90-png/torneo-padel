@@ -158,10 +158,8 @@ tr:last-child td{border-bottom:none}
 .ad-banner.clickable{cursor:pointer}
 .ad-img{max-height:84px;max-width:80vw;object-fit:contain}
 .ad-text{color:var(--accent2);font-weight:700;font-size:14px;letter-spacing:2px;text-transform:uppercase}
-.ad-marquee{width:100%;overflow:hidden;display:flex;justify-content:center}
-.ad-marquee.scrolling{justify-content:flex-start}
-.ad-track{display:inline-flex;align-items:center;gap:40px;white-space:nowrap}
-.ad-track.ad-scroll{padding-left:40px;animation:adscroll linear infinite;will-change:transform}
+.ad-marquee{width:100%;overflow:hidden;display:flex}
+.ad-track{display:inline-flex;align-items:center;gap:40px;white-space:nowrap;padding-left:40px;animation-name:adscroll;animation-timing-function:linear;animation-iteration-count:infinite;will-change:transform}
 .ad-track img.ad-img{height:74px;max-height:74px;width:auto;max-width:none;object-fit:contain;border-radius:6px}
 .ad-track .ad-text{font-size:18px;color:var(--accent2);font-weight:700;white-space:nowrap;letter-spacing:1px}
 @keyframes adscroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
@@ -484,40 +482,14 @@ function adItems(){
   });
   return items;
 }
-let _adRO=null;
 function renderAdBanners(){
-  if(_adRO){_adRO.disconnect();_adRO=null}
   const items=adItems();
   const slots=[{id:'adContent',ph:'<span style="font-size:18px">📢</span><span class="ad-text">ZONA DE PUBLICIDAD</span>'},{id:'playerAdContent',ph:'<span style="font-size:18px">📢</span><span class="ad-text">ZONA DE PUBLICIDAD</span>'}];
   if(!items.length){slots.forEach(s=>{const el=document.getElementById(s.id);if(el)el.innerHTML=s.ph});return}
   const one=items.map(it=>it.type==='img'?`<img class="ad-img" src="${esc(it.src)}"/>`:`<span class="ad-text">📢 ${esc(it.text)}</span>`).join('');
-  if(typeof ResizeObserver!=='undefined')_adRO=new ResizeObserver(es=>es.forEach(e=>e.target.__decide&&e.target.__decide()));
-  slots.forEach(s=>{
-    const el=document.getElementById(s.id);if(!el)return;
-    el.innerHTML=`<div class="ad-marquee"><div class="ad-track">${one}</div></div>`;
-    const marquee=el.querySelector('.ad-marquee'),track=el.querySelector('.ad-track');
-    const decide=()=>{
-      if(!marquee||!track||!marquee.clientWidth)return;
-      const dup=track.dataset.dup==='1';
-      const oneW=dup?track.scrollWidth/2:track.scrollWidth;
-      const need=oneW>marquee.clientWidth+4;
-      if(need&&track.dataset.mode!=='scroll'){
-        if(!dup){track.innerHTML=one+one;track.dataset.dup='1'}
-        marquee.classList.add('scrolling');track.classList.add('ad-scroll');
-        track.style.animationDuration=Math.max(16,Math.round((track.scrollWidth/2)/60))+'s';
-        track.dataset.mode='scroll';
-      }else if(!need&&track.dataset.mode!=='static'){
-        if(dup){track.innerHTML=one;track.dataset.dup='0'}
-        marquee.classList.remove('scrolling');track.classList.remove('ad-scroll');
-        track.dataset.mode='static';
-      }
-    };
-    marquee.__decide=decide;
-    decide();
-    el.querySelectorAll('img').forEach(im=>{if(!im.complete)im.addEventListener('load',decide,{once:true})});
-    if(_adRO)_adRO.observe(marquee);
-    setTimeout(decide,500);setTimeout(decide,1500);
-  });
+  const dur=Math.max(18,items.length*4);
+  const html=`<div class="ad-marquee"><div class="ad-track" style="animation-duration:${dur}s">${one}${one}</div></div>`;
+  slots.forEach(s=>{const el=document.getElementById(s.id);if(el)el.innerHTML=html});
 }
 
 // ═══════════════════════════════════
@@ -601,14 +573,14 @@ async function logout(){
 function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');window.scrollTo(0,0)}
 function goWelcome(){stopRefresh();showScreen('welcomeScreen');applyVisuals()}
 function goPlayers(){
-  applyVisuals();showScreen('playerScreen');
+  showScreen('playerScreen');applyVisuals();
   if(S.started)enablePTab('resultados');
   if(S.bracketBuilt)enablePTab('bracket');
   showPTab('zonas');
   startRefresh();
 }
 function enterSup(){
-  stopRefresh();applyVisuals();showScreen('supScreen');
+  stopRefresh();showScreen('supScreen');applyVisuals();
   if(S.started)enableSTab('resultados');
   if(S.bracketBuilt)enableSTab('bracket');
   showSTab('torneo');
