@@ -485,8 +485,13 @@ function adItems(){
   });
   return items;
 }
+let _adSig=null;
 function renderAdBanners(){
   const items=adItems();
+  const sig=JSON.stringify(items);
+  const _aEl=document.getElementById('adContent'),_pEl=document.getElementById('playerAdContent');
+  if(sig===_adSig&&_aEl&&_aEl.children.length&&_pEl&&_pEl.children.length)return;
+  _adSig=sig;
   const slots=[{id:'adContent',ph:'<span style="font-size:18px">📢</span><span class="ad-text">ZONA DE PUBLICIDAD</span>'},{id:'playerAdContent',ph:'<span style="font-size:18px">📢</span><span class="ad-text">ZONA DE PUBLICIDAD</span>'}];
   if(!items.length){slots.forEach(s=>{const el=document.getElementById(s.id);if(el)el.innerHTML=s.ph});return}
   const one=items.map(it=>it.type==='img'?`<img class="ad-img" src="${esc(it.src)}"/>`:`<span class="ad-text">📢 ${esc(it.text)}</span>`).join('');
