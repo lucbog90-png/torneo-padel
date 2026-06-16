@@ -253,7 +253,7 @@ tr:last-child td{border-bottom:none}
   <nav class="app-nav">
     <button class="nav-btn active" id="pnav-zonas" onclick="showPTab('zonas')">Zonas</button>
     <button class="nav-btn" id="pnav-resultados" onclick="showPTab('resultados')" disabled>Resultados</button>
-    <button class="nav-btn" id="pnav-bracket" onclick="showPTab('bracket')" disabled>Drop / Llaves</button>
+    <button class="nav-btn" id="pnav-bracket" onclick="showPTab('bracket')" disabled>Draws / Llaves</button>
   </nav>
   <main class="app-main" id="playerContent"></main>
   <div class="ad-banner" id="playerAdBanner">
@@ -281,7 +281,7 @@ tr:last-child td{border-bottom:none}
     <button class="nav-btn active" id="snav-torneo" onclick="showSTab('torneo')">Torneo</button>
     <button class="nav-btn" id="snav-inscripcion" onclick="showSTab('inscripcion')">Inscripción</button>
     <button class="nav-btn" id="snav-resultados" onclick="showSTab('resultados')" disabled>Resultados</button>
-    <button class="nav-btn" id="snav-bracket" onclick="showSTab('bracket')" disabled>Drop</button>
+    <button class="nav-btn" id="snav-bracket" onclick="showSTab('bracket')" disabled>Draws</button>
     <button class="nav-btn" id="snav-config" onclick="showSTab('config')">Config.</button>
   </nav>
   <main class="app-main" id="supContent"></main>
@@ -341,7 +341,7 @@ tr:last-child td{border-bottom:none}
 
 <div class="overlay" id="dropPublishModal" style="display:none">
   <div class="modal" style="width:min(520px,100%);max-height:90vh;overflow-y:auto">
-    <h2 style="color:#a855f7">📲 Publicar Partidos del Drop</h2>
+    <h2 style="color:#a855f7">📲 Publicar Partidos del Draws</h2>
     <p>Imagen vertical lista para historias de Instagram y estados de WhatsApp</p>
     <img id="dropPreview" class="pub-preview" style="display:none"/>
     <div class="modal-btns">
@@ -912,7 +912,7 @@ function renderBracketTab(){
     }).join('');
     return`<div class="drop-round"><div class="drop-round-title">${r.name}</div>${slots}</div>`;
   }).join('');
-  html+=`<div class="card" style="padding:14px"><div class="card-title">🎯 DROP</div><div class="drop-wrap"><div class="drop">${rounds}</div></div></div>`;
+  html+=`<div class="card" style="padding:14px"><div class="card-title">🎯 DRAWS</div><div class="drop-wrap"><div class="drop">${rounds}</div></div></div>`;
   return html;
 }
 
@@ -922,7 +922,7 @@ function renderBracketTab(){
 function renderSupResultados(){
   const allDone=S.zones.length>0&&S.zones.every(z=>z.closed);
   let html='';
-  if(allDone&&!S.bracketBuilt)html+=`<div class="card" style="border-color:var(--gold)"><div class="card-title" style="color:var(--gold)">🏆 Generar Drop</div><button class="btn btn-gold" onclick="buildDrop()">Generar Drop →</button></div>`;
+  if(allDone&&!S.bracketBuilt)html+=`<div class="card" style="border-color:var(--gold)"><div class="card-title" style="color:var(--gold)">🏆 Generar Draws</div><button class="btn btn-gold" onclick="buildDrop()">Generar Draws →</button></div>`;
   html+=`<div class="card" style="border-color:rgba(168,85,247,.4)"><div class="card-title" style="color:#a855f7">📲 Publicar / Exportar</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-pub" onclick="openPublish()">📲 Generar Flyer</button><button class="btn btn-secondary" onclick="exportCSV()">⬇️ Descargar resultados (CSV)</button></div></div>`;
   html+=`<div class="wo-hint">💡 Para cargar un W.O. (no presentado): elegí el ganador y guardá sin escribir resultado de sets.</div>`;
   S.zones.forEach(z=>{
@@ -1049,7 +1049,7 @@ async function buildDrop(){
   }
   if(!rounds||!rounds.length){toast('Sin clasificados suficientes');return}
   S.bracket=rounds;S.bracketBuilt=true;await save();
-  enableSTab('bracket');enablePTab('bracket');showSTab('bracket');toast('¡Drop generado!');
+  enableSTab('bracket');enablePTab('bracket');showSTab('bracket');toast('¡Draws generado!');
 }
 // Arma el drop con las posiciones (1°A, 2°B...) usando los clasificados que ya haya.
 // Las posiciones sin definir quedan como etiqueta; se completan solas al cerrar zonas.
@@ -1483,7 +1483,7 @@ function downloadFlyer(){
 // FLYER DEL DROP (vertical, para historias)
 // ═══════════════════════════════════
 function openDropPublish(){
-  if(!S.bracket.length){toast('Generá el drop primero');return}
+  if(!S.bracket.length){toast('Generá el Draws primero');return}
   document.getElementById('dropPublishModal').style.display='flex';
   generateDropFlyer();
 }
@@ -1534,7 +1534,7 @@ function generateDropFlyer(){
     ctx.fillStyle='#00e5a0';ctx.fillRect(0,0,Wc,7);ctx.fillStyle='#ff6b35';ctx.fillRect(0,Hc-7,Wc,7);
     ctx.textAlign='center';
     ctx.font=`bold 58px 'Bebas Neue',Impact,sans-serif`;ctx.fillStyle='#00e5a0';ctx.fillText(S.name.toUpperCase(),Wc/2,90);
-    ctx.font=`bold 40px 'Bebas Neue',Impact,sans-serif`;ctx.fillStyle='#4fc3f7';ctx.fillText('🏆 DROP · LLAVE COMPLETA'+(S.category?' · '+S.category.toUpperCase():''),Wc/2,140);
+    ctx.font=`bold 40px 'Bebas Neue',Impact,sans-serif`;ctx.fillStyle='#4fc3f7';ctx.fillText('🏆 DRAWS · LLAVE COMPLETA'+(S.category?' · '+S.category.toUpperCase():''),Wc/2,140);
     ctx.font='26px Rajdhani,Arial';ctx.fillStyle='rgba(255,255,255,.5)';const dt=new Date().toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'long'});ctx.fillText(dt.toUpperCase(),Wc/2,178);
     for(let r=0;r<R;r++){ctx.textAlign='center';ctx.font='bold 22px Rajdhani,Arial';ctx.fillStyle='rgba(79,195,247,.85)';ctx.fillText((rounds[r].name||'').toUpperCase(),xCol(r)+boxW/2,headerTop+6)}
     ctx.strokeStyle='rgba(79,195,247,.35)';ctx.lineWidth=1.5;
