@@ -96,6 +96,9 @@ table{width:100%;border-collapse:collapse}
 th{background:rgba(18,24,36,.9);color:var(--text2);font-size:10px;letter-spacing:1px;text-transform:uppercase;padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)}
 td{padding:10px;border-bottom:1px solid var(--border);font-size:14px}
 tr:last-child td{border-bottom:none}
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.tbl-zone th{padding:5px 4px;font-size:9px;letter-spacing:.3px;white-space:nowrap}
+.tbl-zone td{padding:5px 4px;font-size:11px;white-space:nowrap}
 .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase}
 .badge-green{background:rgba(0,229,160,.15);color:var(--accent);border:1px solid rgba(0,229,160,.3)}
 .badge-blue{background:rgba(79,195,247,.15);color:var(--accent3);border:1px solid rgba(79,195,247,.3)}
@@ -894,7 +897,7 @@ function renderZoneCard(z){
   const matchRows=z.matches.map(m=>matchRowHTML(m)).join('');
   const qualLine=z.qualified.map((q,i)=>`<span>${['🥇','🥈','🥉'][i]} ${esc(q.a)}</span>`).join(' · ');
   return`<div class="zone-card"><div class="zone-card-title"><span>${z.name} ${z.size===4?'<span class="badge badge-blue">4p</span>':''}</span>${z.closed?'<span class="badge badge-green">✓</span>':''}</div>
-    <table style="margin-bottom:10px;font-size:12px"><thead><tr><th>Pos</th><th>Pareja</th><th>PG</th><th>SG</th><th>SP</th><th>Dif</th><th>Gm</th><th>Dif</th></tr></thead><tbody>${stRows}</tbody></table>
+    <div class="tbl-wrap" style="margin-bottom:10px"><table class="tbl-zone"><thead><tr><th>Pos</th><th>Pareja</th><th>PG</th><th>SG</th><th>SP</th><th>Dif</th><th>Gm</th><th>Dif</th></tr></thead><tbody>${stRows}</tbody></table></div>
     ${matchRows}
     ${qualLine?`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:11px;font-weight:600;color:var(--text2)">${qualLine}</div>`:''}
   </div>`;
@@ -905,7 +908,7 @@ function renderResultados(){
     const posL=['🥇 1°','🥈 2°','🥉 3°','4°'];
     const cupos=z.size===4?3:2;
     const rows=z.standings.map((s,i)=>{const ds=s.setW-s.setL,dg=s.sw-s.sl;return`<tr class="${i<cupos&&z.closed?'row-qual':''}"><td style="font-weight:700">${posL[i]||i+1}</td><td style="font-weight:600">${esc(s.pair.a)} / ${esc(s.pair.b)}</td><td>${s.wins}</td><td>${s.setW}</td><td>${s.setL}</td><td style="font-weight:700;color:${ds>0?'var(--accent)':ds<0?'var(--danger)':'var(--text2)'}">${ds>0?'+':''}${ds}</td><td style="color:var(--text2)">${s.sw}-${s.sl}</td><td style="font-weight:700;color:${dg>0?'var(--accent)':dg<0?'var(--danger)':'var(--text2)'}">${dg>0?'+':''}${dg}</td><td>${i<cupos&&z.closed?'<span class="badge badge-green">Clas.</span>':(z.closed?'<span class="badge badge-red">Elim.</span>':'-')}</td></tr>`}).join('');
-    return`<div class="card"><div class="card-title">📊 ${z.name}</div><table style="font-size:12px"><thead><tr><th>Pos</th><th>Pareja</th><th>PG</th><th>SG</th><th>SP</th><th>Dif</th><th>Games</th><th>Dif</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    return`<div class="card"><div class="card-title">📊 ${z.name}</div><div class="tbl-wrap"><table class="tbl-zone"><thead><tr><th>Pos</th><th>Pareja</th><th>PG</th><th>SG</th><th>SP</th><th>Dif</th><th>Games</th><th>Dif</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
   }).join('');
 }
 function renderBracketTab(){
