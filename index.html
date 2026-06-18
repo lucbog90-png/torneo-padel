@@ -1016,11 +1016,15 @@ function buildDropFromTemplate(tokens,map){
   const first=[];
   for(let i=0;i<size;i+=2){
     let la=tokens[i],lb=tokens[i+1];
-    let a=(la&&la!=='-')?map[la]:null,b=(lb&&lb!=='-')?map[lb]:null;
+    const aBye=(!la||la==='-'),bBye=(!lb||lb==='-');   // lado "-" en la plantilla = BYE estructural real
+    let a=aBye?null:(map[la]||null),b=bBye?null:(map[lb]||null);
     let labA=dropFmtLabel(la),labB=dropFmtLabel(lb);
-    if(!a&&b){a=b;b=null;labA=labB;labB=''}      // bye: la pareja presente va a teamA
-    const bye=!!(a&&!b);
-    first.push({id:uid(),teamA:a||null,labelA:labA,teamB:b||null,labelB:labB,sets:[],winner:bye?a.id:null,status:bye?'done':'pending',schedule:null,isBye:bye});
+    let bye=false;
+    if(bBye&&!aBye){bye=true;}                          // lado B vacío en la plantilla -> A tiene BYE
+    else if(aBye&&!bBye){a=b;b=null;labA=labB;labB='';bye=true;}  // lado A vacío -> mover la presente a teamA
+    // SOLO un BYE estructural (lado "-") pasa solo. Un cruce real espera a las dos parejas y al ganador que cargue el supervisor.
+    const ready=bye&&!!a;
+    first.push({id:uid(),teamA:a||null,labelA:labA,teamB:b||null,labelB:labB,sets:[],winner:ready?a.id:null,status:ready?'done':'pending',schedule:null,isBye:bye});
   }
   const rounds=[{name:roundName(size/2),matches:first}];
   let cur=size/2;while(cur>1){cur/=2;const em=[];for(let i=0;i<cur;i++)em.push({id:uid(),teamA:null,teamB:null,labelA:'',labelB:'',sets:[],winner:null,status:'pending',schedule:null,isBye:false});rounds.push({name:roundName(cur),matches:em})}
