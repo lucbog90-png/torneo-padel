@@ -817,18 +817,23 @@ function propagateZone(z,idx){
   });
 }
 function recalcZone(z){
-  const st={};z.pairs.forEach(p=>{st[p.id]={pair:p,wins:0,losses:0,sw:0,sl:0,gw:0,gl:0}});
+  const st={};z.pairs.forEach(p=>{st[p.id]={pair:p,wins:0,losses:0,setW:0,setL:0,sw:0,sl:0,gw:0,gl:0}});
   z.matches.filter(m=>m.status==='done'&&m.teamA&&m.teamB).forEach(m=>{
     const w=m.winner===m.teamA.id?m.teamA:m.teamB,l=m.winner===m.teamA.id?m.teamB:m.teamA;
     if(st[w.id])st[w.id].wins++;if(st[l.id])st[l.id].losses++;
-    m.sets.forEach(s=>{if(s.stb){if(st[m.teamA.id]){st[m.teamA.id].gw+=s.a;st[m.teamA.id].gl+=s.b}if(st[m.teamB.id]){st[m.teamB.id].gw+=s.b;st[m.teamB.id].gl+=s.a}}else{if(st[m.teamA.id]){st[m.teamA.id].sw+=s.a;st[m.teamA.id].sl+=s.b;st[m.teamA.id].gw+=s.ga||0;st[m.teamA.id].gl+=s.gb||0}if(st[m.teamB.id]){st[m.teamB.id].sw+=s.b;st[m.teamB.id].sl+=s.a;st[m.teamB.id].gw+=s.gb||0;st[m.teamB.id].gl+=s.ga||0}}});
+    m.sets.forEach(s=>{
+      // Sets ganados/perdidos (el super tie-break cuenta como un set)
+      if(s.a>s.b){if(st[m.teamA.id])st[m.teamA.id].setW++;if(st[m.teamB.id])st[m.teamB.id].setL++}
+      else if(s.b>s.a){if(st[m.teamB.id])st[m.teamB.id].setW++;if(st[m.teamA.id])st[m.teamA.id].setL++}
+      if(s.stb){if(st[m.teamA.id]){st[m.teamA.id].gw+=s.a;st[m.teamA.id].gl+=s.b}if(st[m.teamB.id]){st[m.teamB.id].gw+=s.b;st[m.teamB.id].gl+=s.a}}
+      else{if(st[m.teamA.id]){st[m.teamA.id].sw+=s.a;st[m.teamA.id].sl+=s.b;st[m.teamA.id].gw+=s.ga||0;st[m.teamA.id].gl+=s.gb||0}if(st[m.teamB.id]){st[m.teamB.id].sw+=s.b;st[m.teamB.id].sl+=s.a;st[m.teamB.id].gw+=s.gb||0;st[m.teamB.id].gl+=s.ga||0}}
+    });
   });
-  const tb=(a,b)=>{const ds=(b.sw-b.sl)-(a.sw-a.sl);if(ds)return ds;const dg=(b.gw-b.gl)-(a.gw-a.gl);if(dg)return dg;return b.gw-a.gw};
-  // Orden CORRECTO para todas las zonas: 1º partidos ganados, luego diferencia de sets/games
-  z.standings=Object.values(st).sort((a,b)=>b.wins!==a.wins?b.wins-a.wins:tb(a,b));
-  // La zona se cierra cuando TODOS sus partidos están jugados
+  // Desempate: 1º partidos ganados · 2º (zona 4) mano a mano si se enfrentaron · 3º diferencia de SETS · 4º diferencia de GAMES · 5º puntos de tie-break
+  const tb=(a,b)=>{const dset=(b.setW-b.setL)-(a.setW-a.setL);if(dset)return dset;const dg=(b.sw-b.sl)-(a.sw-a.sl);if(dg)return dg;const dp=(b.gw-b.gl)-(a.gw-a.gl);if(dp)return dp;return b.gw-a.gw};
+  const h2h=(aId,bId)=>{const mm=z.matches.find(m=>m.status==='done'&&m.teamA&&m.teamB&&((m.teamA.id===aId&&m.teamB.id===bId)||(m.teamA.id===bId&&m.teamB.id===aId)));return mm?(mm.winner===aId?-1:mm.winner===bId?1:0):0};
+  z.standings=Object.values(st).sort((a,b)=>{if(b.wins!==a.wins)return b.wins-a.wins;if(z.size===4){const h=h2h(a.pair.id,b.pair.id);if(h)return h}return tb(a,b)});
   z.closed=z.matches.length>0&&z.matches.every(m=>m.status==='done');
-  // Clasifican: en zona de 3 -> 2 parejas; en zona de 4 -> 3 parejas
   const cupos=z.size===4?3:2;
   z.qualified=z.closed?z.standings.slice(0,cupos).map(s=>s.pair):[];
 }
@@ -880,15 +885,15 @@ function renderZonas(){
 }
 function renderZoneCard(z){
   const posClass=['pos-gold','pos-silver','pos-bronze',''];
-  const dif=s=>{const d=s.sw-s.sl;return(d>0?'+':'')+d};
+  const difN=d=>(d>0?'+':'')+d,difCol=d=>d>0?'var(--accent)':d<0?'var(--danger)':'var(--text2)';
   const cupos=z.size===4?3:2;
   const stRows=z.standings.length
-    ?z.standings.map((s,i)=>`<tr class="${i<cupos&&z.closed?'row-qual':''}"><td class="${posClass[i]||''}">${['🥇','🥈','🥉','4°'][i]||i+1}</td><td style="font-weight:600;font-size:13px">${esc(s.pair.a)}<br>${esc(s.pair.b)}</td><td>${s.wins}</td><td style="font-size:11px;color:var(--text2)">${s.sw}-${s.sl}</td><td style="font-size:12px;font-weight:700;color:${(s.sw-s.sl)>0?'var(--accent)':(s.sw-s.sl)<0?'var(--danger)':'var(--text2)'}">${dif(s)}</td></tr>`).join('')
-    :z.pairs.map((p,i)=>`<tr><td style="color:var(--text2)">${i+1}</td><td style="font-weight:600;font-size:13px">${esc(p.a)}<br>${esc(p.b)}</td><td>-</td><td>-</td><td>-</td></tr>`).join('');
+    ?z.standings.map((s,i)=>{const ds=s.setW-s.setL,dg=s.sw-s.sl;return`<tr class="${i<cupos&&z.closed?'row-qual':''}"><td class="${posClass[i]||''}">${['🥇','🥈','🥉','4°'][i]||i+1}</td><td style="font-weight:600;font-size:12px">${esc(s.pair.a)}<br>${esc(s.pair.b)}</td><td>${s.wins}</td><td style="font-size:11px">${s.setW}</td><td style="font-size:11px">${s.setL}</td><td style="font-size:12px;font-weight:700;color:${difCol(ds)}">${difN(ds)}</td><td style="font-size:11px;color:var(--text2)">${s.sw}-${s.sl}</td><td style="font-size:12px;font-weight:700;color:${difCol(dg)}">${difN(dg)}</td></tr>`}).join('')
+    :z.pairs.map((p,i)=>`<tr><td style="color:var(--text2)">${i+1}</td><td style="font-weight:600;font-size:12px">${esc(p.a)}<br>${esc(p.b)}</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td></tr>`).join('');
   const matchRows=z.matches.map(m=>matchRowHTML(m)).join('');
   const qualLine=z.qualified.map((q,i)=>`<span>${['🥇','🥈','🥉'][i]} ${esc(q.a)}</span>`).join(' · ');
   return`<div class="zone-card"><div class="zone-card-title"><span>${z.name} ${z.size===4?'<span class="badge badge-blue">4p</span>':''}</span>${z.closed?'<span class="badge badge-green">✓</span>':''}</div>
-    <table style="margin-bottom:10px"><thead><tr><th>Pos</th><th>Pareja</th><th>G</th><th>Sets</th><th>Dif</th></tr></thead><tbody>${stRows}</tbody></table>
+    <table style="margin-bottom:10px;font-size:12px"><thead><tr><th>Pos</th><th>Pareja</th><th>PG</th><th>SG</th><th>SP</th><th>Dif</th><th>Gm</th><th>Dif</th></tr></thead><tbody>${stRows}</tbody></table>
     ${matchRows}
     ${qualLine?`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:11px;font-weight:600;color:var(--text2)">${qualLine}</div>`:''}
   </div>`;
@@ -898,8 +903,8 @@ function renderResultados(){
   return S.zones.map(z=>{
     const posL=['🥇 1°','🥈 2°','🥉 3°','4°'];
     const cupos=z.size===4?3:2;
-    const rows=z.standings.map((s,i)=>`<tr class="${i<cupos&&z.closed?'row-qual':''}"><td style="font-weight:700">${posL[i]||i+1}</td><td style="font-weight:600">${esc(s.pair.a)} / ${esc(s.pair.b)}</td><td>${s.wins}</td><td>${s.losses}</td><td>${s.sw}-${s.sl}</td><td style="font-weight:700;color:${(s.sw-s.sl)>0?'var(--accent)':(s.sw-s.sl)<0?'var(--danger)':'var(--text2)'}">${(s.sw-s.sl)>0?'+':''}${s.sw-s.sl}</td><td>${i<cupos&&z.closed?'<span class="badge badge-green">Clas.</span>':(z.closed?'<span class="badge badge-red">Elim.</span>':'-')}</td></tr>`).join('');
-    return`<div class="card"><div class="card-title">📊 ${z.name}</div><table><thead><tr><th>Pos</th><th>Pareja</th><th>G</th><th>P</th><th>Sets</th><th>Dif</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    const rows=z.standings.map((s,i)=>{const ds=s.setW-s.setL,dg=s.sw-s.sl;return`<tr class="${i<cupos&&z.closed?'row-qual':''}"><td style="font-weight:700">${posL[i]||i+1}</td><td style="font-weight:600">${esc(s.pair.a)} / ${esc(s.pair.b)}</td><td>${s.wins}</td><td>${s.setW}</td><td>${s.setL}</td><td style="font-weight:700;color:${ds>0?'var(--accent)':ds<0?'var(--danger)':'var(--text2)'}">${ds>0?'+':''}${ds}</td><td style="color:var(--text2)">${s.sw}-${s.sl}</td><td style="font-weight:700;color:${dg>0?'var(--accent)':dg<0?'var(--danger)':'var(--text2)'}">${dg>0?'+':''}${dg}</td><td>${i<cupos&&z.closed?'<span class="badge badge-green">Clas.</span>':(z.closed?'<span class="badge badge-red">Elim.</span>':'-')}</td></tr>`}).join('');
+    return`<div class="card"><div class="card-title">📊 ${z.name}</div><table style="font-size:12px"><thead><tr><th>Pos</th><th>Pareja</th><th>PG</th><th>SG</th><th>SP</th><th>Dif</th><th>Games</th><th>Dif</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }).join('');
 }
 function renderBracketTab(){
