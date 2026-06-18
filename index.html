@@ -446,6 +446,7 @@ function applyState(d){
     started:!!d.started,bracketBuilt:!!d.bracketBuilt,
     logoDataUrl:d.logoDataUrl||null,adDataUrl:d.adDataUrl||null,bgDataUrl:d.bgDataUrl||null,
   });
+  if(S.zones&&S.zones.length)S.zones.forEach(z=>{try{recalcZone(z)}catch(e){}});
   applyVisuals();
   if(S.started){enablePTab('resultados');enableSTab('resultados')}
   if(S.bracketBuilt){enablePTab('bracket');enableSTab('bracket')}
