@@ -1332,7 +1332,22 @@ function renderConfig(){
         <label class="upload-area"><div style="font-size:26px">🏟️</div><p>Cargar fondo</p><input type="file" accept="image/*" style="display:none" onchange="loadBg(this)"/></label>
       </div>
     </div>
+    <div class="card"><div class="card-title">💾 Backup de datos</div>
+      <p style="color:var(--text2);font-size:13px;line-height:1.6;margin-bottom:14px">Descargá una copia de seguridad de todos los datos (parejas, zonas, resultados, cuadro). Guardá el archivo por las dudas, sobre todo antes de cambios importantes.</p>
+      <button class="btn btn-primary" onclick="exportBackup()">⬇️ Descargar backup</button>
+    </div>
   </div>`;
+}
+function exportBackup(){
+  try{
+    const blob=new Blob([JSON.stringify(S,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.download=`backup_${(S.name||'torneo').replace(/[^a-z0-9]+/gi,'_')}_${new Date().toISOString().slice(0,10)}.json`;
+    a.href=url;a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),1500);
+    toast('✓ Backup descargado');
+  }catch(e){toast('⚠️ No se pudo generar el backup',3500)}
 }
 
 // ═══════════════════════════════════
