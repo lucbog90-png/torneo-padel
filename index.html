@@ -429,13 +429,37 @@ const S={
   currentPTab:'zonas',currentSTab:'torneo',
 };
 
+// ===== MULTI-TORNEO (base) =====
+let _viewT=0; // torneo cargado en los campos de trabajo (S.pairs, S.zones, ...)
+function migrateT(){
+  if(!S.tournaments||!S.tournaments.length){
+    S.tournaments=[{id:uid(),label:S.category||'Torneo 1',category:S.category||'',description:S.description||'',pairs:S.pairs||[],zones:S.zones||[],bracket:S.bracket||[],started:!!S.started,bracketBuilt:!!S.bracketBuilt}];
+    S.activeT=0;
+  }
+  if(typeof S.activeT!=='number'||S.activeT<0||S.activeT>=S.tournaments.length)S.activeT=0;
+}
+function loadT(i){
+  const t=S.tournaments[i];if(!t)return;
+  S.category=t.category||'';S.description=t.description||'';
+  S.pairs=t.pairs||[];S.zones=t.zones||[];S.bracket=t.bracket||[];
+  S.started=!!t.started;S.bracketBuilt=!!t.bracketBuilt;
+  _viewT=i;
+}
+function syncT(){
+  const t=S.tournaments&&S.tournaments[_viewT];if(!t)return;
+  t.category=S.category;t.description=S.description;
+  t.pairs=S.pairs;t.zones=S.zones;t.bracket=S.bracket;
+  t.started=S.started;t.bracketBuilt=S.bracketBuilt;
+}
+
 async function save(){
   if(!_isAdmin){toast('Iniciá sesión para guardar');return}
+  syncT();
   const data={
-    name:S.name,category:S.category,description:S.description,
-    pairs:S.pairs,zones:S.zones,bracket:S.bracket,sponsors:S.sponsors,
-    started:S.started,bracketBuilt:S.bracketBuilt,
-    logoDataUrl:S.logoDataUrl,adDataUrl:S.adDataUrl,bgDataUrl:S.bgDataUrl
+    name:S.name,sponsors:S.sponsors,
+    logoDataUrl:S.logoDataUrl,adDataUrl:S.adDataUrl,bgDataUrl:S.bgDataUrl,
+    tournaments:S.tournaments,activeT:S.activeT,
+    category:S.category,description:S.description,pairs:S.pairs,zones:S.zones,bracket:S.bracket,started:S.started,bracketBuilt:S.bracketBuilt
   };
   try{localStorage.setItem('padel_backup_'+ROW_KEY,JSON.stringify(data))}catch(e){}
   await sbUpsert(data);
@@ -443,13 +467,20 @@ async function save(){
 
 function applyState(d){
   if(!d)return;
-  Object.assign(S,{
-    name:d.name||S.name,category:d.category||'',description:d.description||'',
-    pairs:d.pairs||[],zones:d.zones||[],bracket:d.bracket||[],sponsors:d.sponsors||[],
-    started:!!d.started,bracketBuilt:!!d.bracketBuilt,
-    logoDataUrl:d.logoDataUrl||null,adDataUrl:d.adDataUrl||null,bgDataUrl:d.bgDataUrl||null,
-  });
-  if(S.zones&&S.zones.length)S.zones.forEach(z=>{try{recalcZone(z)}catch(e){}});
+  S.name=d.name||S.name;S.sponsors=d.sponsors||[];
+  S.logoDataUrl=d.logoDataUrl||null;S.adDataUrl=d.adDataUrl||null;S.bgDataUrl=d.bgDataUrl||null;
+  if(d.tournaments&&d.tournaments.length){
+    S.tournaments=d.tournaments;S.activeT=(typeof d.activeT==='number')?d.activeT:0;
+  }else{
+    S.category=d.category||'';S.description=d.description||'';
+    S.pairs=d.pairs||[];S.zones=d.zones||[];S.bracket=d.bracket||[];
+    S.started=!!d.started;S.bracketBuilt=!!d.bracketBuilt;
+    S.tournaments=null;
+  }
+  migrateT();
+  let vt=_viewT;if(typeof vt!=='number'||vt<0||vt>=S.tournaments.length)vt=S.activeT;
+  loadT(vt);
+  S.tournaments.forEach(t=>{(t.zones||[]).forEach(z=>{try{recalcZone(z)}catch(e){}})});
   applyVisuals();
   if(S.started){enablePTab('resultados');enableSTab('resultados')}
   if(S.bracketBuilt){enablePTab('bracket');enableSTab('bracket')}
@@ -1353,8 +1384,8 @@ function exportBackup(){
 // ═══════════════════════════════════
 // RESET
 // ═══════════════════════════════════
-function openReset(){showConfirm('⚠️ BORRAR TORNEO','Se eliminarán <strong>todos los datos</strong> del torneo.','var(--danger)','🗑️ Sí, borrar todo',async()=>{
-  Object.assign(S,{pairs:[],zones:[],bracket:[],started:false,bracketBuilt:false,name:'Torneo de Pádel',category:'',description:'',sponsors:[],logoDataUrl:null,adDataUrl:null});
+function openReset(){showConfirm('⚠️ BORRAR TORNEO','Se eliminarán <strong>todos los datos del torneo activo</strong> (parejas, zonas, resultados, cuadro). El club, logo y auspiciantes se mantienen.','var(--danger)','🗑️ Sí, borrar este torneo',async()=>{
+  Object.assign(S,{pairs:[],zones:[],bracket:[],started:false,bracketBuilt:false,category:'',description:''});
   try{localStorage.removeItem('padel_backup_'+ROW_KEY)}catch(e){}
   await save();
   disableSTab('resultados');disableSTab('bracket');
