@@ -330,6 +330,17 @@ tr:last-child td{border-bottom:none}
   </div>
 </div>
 
+<div class="overlay" id="promptModal" style="display:none">
+  <div class="confirm-modal" id="promptBox">
+    <h2 id="promptTitle" style="color:var(--accent)">Nombre</h2>
+    <input id="promptInput" style="width:100%;margin:10px 0 18px"/>
+    <div class="modal-btns">
+      <button class="btn btn-primary" id="promptBtn">Aceptar</button>
+      <button class="btn btn-secondary" onclick="document.getElementById('promptModal').style.display='none'">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="publishModal" style="display:none">
   <div class="modal" style="width:min(520px,100%);max-height:90vh;overflow-y:auto">
     <h2 style="color:#a855f7">📲 Publicar Zonas</h2>
@@ -574,6 +585,53 @@ function showConfirm(title,msg,color,btnTxt,cb){
   btn.onclick=()=>{m.style.display='none';cb()};
   m.style.display='flex';
 }
+function showPrompt(title,placeholder,current,cb){
+  const m=document.getElementById('promptModal');
+  document.getElementById('promptTitle').textContent=title;
+  const inp=document.getElementById('promptInput');
+  inp.placeholder=placeholder||'';inp.value=current||'';
+  document.getElementById('promptBtn').onclick=()=>{const v=inp.value.trim();if(!v){toast('Escribí un nombre');return}m.style.display='none';cb(v)};
+  m.style.display='flex';setTimeout(()=>{inp.focus()},60);
+}
+function newTournament(){
+  if(S.tournaments.length>=4){toast('Llegaste al máximo de 4 torneos');return}
+  showPrompt('Nuevo torneo','Ej: Suma 13, 8va, Damas','',name=>{
+    syncT();
+    S.tournaments.push({id:uid(),label:name,category:'',description:'',pairs:[],zones:[],bracket:[],started:false,bracketBuilt:false});
+    S.activeT=S.tournaments.length-1;loadT(S.activeT);
+    disableSTab('resultados');disableSTab('bracket');
+    save();applyVisuals();renderSupContent();
+    toast('✓ Torneo "'+name+'" creado');
+  });
+}
+function switchTournament(i){
+  if(i===S.activeT)return;
+  syncT();S.activeT=i;loadT(i);
+  if(S.started)enableSTab('resultados');else disableSTab('resultados');
+  if(S.bracketBuilt)enableSTab('bracket');else disableSTab('bracket');
+  save();applyVisuals();renderSupContent();
+  toast('Gestionando: '+(S.tournaments[i].label||'Torneo '+(i+1)));
+}
+function renameTournament(i){
+  showPrompt('Renombrar torneo','Nombre del torneo',S.tournaments[i].label||'',name=>{
+    S.tournaments[i].label=name;save();renderSupContent();toast('✓ Renombrado');
+  });
+}
+function deleteTournament(i){
+  if(S.tournaments.length<=1){toast('Tiene que haber al menos un torneo');return}
+  const nm=S.tournaments[i].label||('Torneo '+(i+1));
+  showConfirm('⚠️ BORRAR TORNEO','Se eliminará el torneo <strong>'+esc(nm)+'</strong> y todos sus datos. No se puede deshacer.','var(--danger)','🗑️ Sí, borrar',()=>{
+    syncT();
+    S.tournaments.splice(i,1);
+    if(S.activeT>=S.tournaments.length)S.activeT=S.tournaments.length-1;
+    else if(i<S.activeT)S.activeT--;
+    loadT(S.activeT);
+    if(S.started)enableSTab('resultados');else disableSTab('resultados');
+    if(S.bracketBuilt)enableSTab('bracket');else disableSTab('bracket');
+    save();applyVisuals();renderSupContent();
+    toast('Torneo borrado ✓');
+  });
+}
 
 // ═══════════════════════════════════
 // AUTENTICACIÓN (Supabase Auth)
@@ -674,9 +732,16 @@ function renderSupTorneo(){
     <td style="font-weight:600">${esc(sp.name)}</td>
     <td><button class="btn btn-danger btn-sm" onclick="removeSponsor(${i})">✕</button></td>
   </tr>`).join('');
+  const tList=S.tournaments.map((t,i)=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;margin-bottom:6px;background:${i===S.activeT?'rgba(0,229,160,.12)':'rgba(255,255,255,.03)'};border:1px solid ${i===S.activeT?'var(--accent)':'var(--border)'}"><span style="flex:1;font-weight:600;font-size:14px">${esc(t.label||'Torneo '+(i+1))}${i===S.activeT?' <span style="font-size:10px;color:var(--accent)">● gestionando</span>':''}</span>${i===S.activeT?'':`<button class="btn btn-secondary btn-sm" onclick="switchTournament(${i})">Gestionar</button>`}<button class="btn btn-secondary btn-sm" onclick="renameTournament(${i})">✏️</button>${S.tournaments.length>1?`<button class="btn btn-danger btn-sm" onclick="deleteTournament(${i})">🗑️</button>`:''}</div>`).join('');
   return`<div class="card">
+    <div class="card-title">🗂️ Mis torneos</div>
+    <p style="color:var(--text2);font-size:13px;margin-bottom:12px">Podés llevar hasta 4 torneos a la vez. Elegí cuál gestionar o creá uno nuevo. El club, logo y auspiciantes se comparten entre todos.</p>
+    ${tList}
+    ${S.tournaments.length<4?`<button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="newTournament()">+ Nuevo torneo</button>`:'<p style="color:var(--text2);font-size:12px;margin-top:8px">Llegaste al máximo de 4 torneos.</p>'}
+  </div>
+  <div class="card">
     <div class="card-title">🏆 Información del Torneo</div>
-    <div class="ig" style="margin-bottom:12px"><label>Nombre</label>
+    <div class="ig" style="margin-bottom:12px"><label>Nombre del club (se ve en toda la página)</label>
       <input value="${esc(S.name)}" oninput="S.name=this.value;applyVisuals()" onblur="save()"/>
     </div>
     <div class="ig" style="margin-bottom:12px"><label>Categoría (Ej: Suma 13, Libre, +14)</label>
