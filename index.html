@@ -676,20 +676,36 @@ function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classL
 function goWelcome(){stopRefresh();showScreen('welcomeScreen');applyVisuals()}
 function goPlayers(){
   showScreen('playerScreen');applyVisuals();
-  if(S.started)enablePTab('resultados');
-  if(S.bracketBuilt)enablePTab('bracket');
+  if(typeof _viewT!=='number'||_viewT<0||!S.tournaments||_viewT>=S.tournaments.length)_viewT=0;
+  if(S.tournaments)loadT(_viewT);
+  enablePTab('zonas');
+  if(S.started)enablePTab('resultados');else disablePTab('resultados');
+  if(S.bracketBuilt)enablePTab('bracket');else disablePTab('bracket');
   showPTab('zonas');
   startRefresh();
 }
+function playerSelectT(i){
+  if(!S.tournaments||!S.tournaments[i])return;
+  _viewT=i;loadT(i);
+  if(S.started)enablePTab('resultados');else disablePTab('resultados');
+  if(S.bracketBuilt)enablePTab('bracket');else disablePTab('bracket');
+  showPTab('zonas');
+}
+function playerTSelector(){
+  if(!S.tournaments||S.tournaments.length<2)return '';
+  return`<div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:10px;margin-bottom:6px;-webkit-overflow-scrolling:touch">${S.tournaments.map((t,i)=>`<button onclick="playerSelectT(${i})" style="flex:0 0 auto;padding:8px 16px;border-radius:20px;border:1px solid ${i===_viewT?'var(--accent)':'var(--border)'};background:${i===_viewT?'var(--accent)':'transparent'};color:${i===_viewT?'#08110d':'var(--text)'};font-weight:700;font-size:13px;white-space:nowrap;cursor:pointer">${esc(t.label||'Torneo '+(i+1))}</button>`).join('')}</div>`;
+}
 function enterSup(){
   stopRefresh();showScreen('supScreen');applyVisuals();
-  if(S.started){enableSTab('resultados');refreshDrop();save();}
+  _viewT=S.activeT;if(S.tournaments)loadT(_viewT);
+  if(S.started){enableSTab('resultados');refreshDrop();save();}else{disableSTab('resultados');disableSTab('bracket')}
   if(S.bracketBuilt)enableSTab('bracket');
   showSTab('torneo');
 }
 
 function showPTab(t){S.currentPTab=t;document.querySelectorAll('#playerScreen .nav-btn').forEach(b=>b.classList.remove('active'));const b=document.getElementById('pnav-'+t);if(b)b.classList.add('active');renderPlayerContent()}
 function enablePTab(n){const b=document.getElementById('pnav-'+n);if(b)b.disabled=false}
+function disablePTab(n){const b=document.getElementById('pnav-'+n);if(b)b.disabled=true}
 function showSTab(t){S.currentSTab=t;document.querySelectorAll('#supScreen .nav-btn').forEach(b=>b.classList.remove('active'));const b=document.getElementById('snav-'+t);if(b)b.classList.add('active');renderSupContent()}
 function enableSTab(n){const b=document.getElementById('snav-'+n);if(b)b.disabled=false}
 function disableSTab(n){const b=document.getElementById('snav-'+n);if(b)b.disabled=true}
@@ -697,7 +713,7 @@ function disableSTab(n){const b=document.getElementById('snav-'+n);if(b)b.disabl
 function renderPlayerContent(){
   const c=document.getElementById('playerContent');
   const m={zonas:renderZonas,resultados:renderResultados,bracket:renderBracketTab};
-  c.innerHTML=(m[S.currentPTab]||renderZonas)();
+  c.innerHTML=playerTSelector()+(m[S.currentPTab]||renderZonas)();
 }
 function renderSupContent(){
   const c=document.getElementById('supContent');
