@@ -129,6 +129,7 @@ tr:last-child td{border-bottom:none}
 .drop-team-names{display:flex;flex-direction:column;gap:1px;flex:1}
 .drop-p1{font-size:12px;line-height:1.3}.drop-p2{font-size:12px;line-height:1.3}
 .drop-score{font-size:11px;color:var(--text2);font-weight:700;flex-shrink:0;margin-left:6px}.drop-score.ws{color:var(--accent)}
+.drop-result{font-size:12px;font-weight:700;color:var(--accent);text-align:center;padding:5px 8px;border-top:1px solid var(--border);letter-spacing:.5px}
 .drop-seed{font-size:9px;color:var(--text2);margin-right:4px;opacity:.7;flex-shrink:0}
 .drop-sch{padding:4px 10px 6px;border-top:1px solid var(--border);background:rgba(79,195,247,.04);font-size:10px;display:flex;gap:6px}
 .drop-sch .dt{color:var(--accent3);font-weight:700}.drop-sch .dc{color:var(--accent2)}
@@ -1031,11 +1032,12 @@ function renderBracketTab(){
   const rounds=S.bracket.map(r=>{
     const slots=r.matches.map(m=>{
       const aW=m.winner===m.teamA?.id,bW=m.winner===m.teamB?.id;
-      const mk=(team,label,isW)=>team?`<div class="drop-team ${isW?'winner':''}">${label?`<span class="drop-seed">${esc(label)}</span>`:''}<div class="drop-team-names"><div class="drop-p1">${esc(team.a)}</div><div class="drop-p2">${esc(team.b)}</div></div>${m.sets.length?`<span class="drop-score ${isW?'ws':''}">${m.sets.map(s=>isW===aW?s.a:s.b).join(' ')}</span>`:''}</div>`:(label?`<div class="drop-team empty-team"><span class="drop-seed" style="opacity:.9">${esc(label)}</span><span style="font-size:10px;color:var(--text2);margin-left:6px">por definir</span></div>`:`<div class="drop-team empty-team"><span>— Espera —</span></div>`);
+      const mk=(team,label,isW)=>team?`<div class="drop-team ${isW?'winner':''}">${label?`<span class="drop-seed">${esc(label)}</span>`:''}<div class="drop-team-names"><div class="drop-p1">${esc(team.a)}</div><div class="drop-p2">${esc(team.b)}</div></div></div>`:(label?`<div class="drop-team empty-team"><span class="drop-seed" style="opacity:.9">${esc(label)}</span><span style="font-size:10px;color:var(--text2);margin-left:6px">por definir</span></div>`:`<div class="drop-team empty-team"><span>— Espera —</span></div>`);
       const tA=mk(m.teamA,m.labelA,aW);
       const tB=m.isBye?`<div class="drop-team bye-team"><span>— BYE —</span></div>`:mk(m.teamB,m.labelB,bW);
       const sch=m.schedule?`<div class="drop-sch">${m.schedule.day?`<span class="dt">📆 ${esc(m.schedule.day)}</span>`:''}${m.schedule.time?`<span class="dt">🕐 ${esc(m.schedule.time)}</span>`:''}${m.schedule.court?`<span class="dc">🏟️ ${esc(m.schedule.court)}</span>`:''}</div>`:'';
-      return`<div class="drop-slot"><div class="drop-match ${m.status==='done'?'match-done':''} ${m.isBye?'match-bye':''}">${tA}${tB}${sch}</div></div>`;
+      const scoreLine=(m.status==='done'&&m.sets&&m.sets.length)?`<div class="drop-result">${m.sets.map(s=>s.stb?`STB ${s.a}-${s.b}`:`${s.a}-${s.b}`).join('  ')}</div>`:(m.status==='done'&&!m.isBye?`<div class="drop-result" style="color:var(--text2)">W.O.</div>`:'');
+      return`<div class="drop-slot"><div class="drop-match ${m.status==='done'?'match-done':''} ${m.isBye?'match-bye':''}">${tA}${tB}${scoreLine}${sch}</div></div>`;
     }).join('');
     return`<div class="drop-round"><div class="drop-round-title">${r.name}</div>${slots}</div>`;
   }).join('');
