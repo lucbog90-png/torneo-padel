@@ -812,8 +812,8 @@ function renderSponsors(){
 // ═══════════════════════════════════
 // INSCRIPCIÓN
 // ═══════════════════════════════════
-const DIAS=['Miércoles','Jueves','Viernes'];
-const DIA_ABBR={'Miércoles':'Mié','Jueves':'Jue','Viernes':'Vie'};
+const DIAS=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+const DIA_ABBR={'Lunes':'Lun','Martes':'Mar','Miércoles':'Mié','Jueves':'Jue','Viernes':'Vie','Sábado':'Sáb'};
 function diasTexto(p){return (p&&p.days&&p.days.length)?p.days.map(d=>DIA_ABBR[d]||d).join(', '):'—';}
 function renderInscripcion(){
   const rows=S.pairs.map((p,i)=>`<tr>
@@ -821,7 +821,7 @@ function renderInscripcion(){
     <td style="font-weight:600">${esc(p.a)} / ${esc(p.b)}</td>
     <td><span class="badge badge-blue" style="white-space:nowrap">📅 ${diasTexto(p)}</span></td>
     <td><span class="badge ${S.started?'badge-green':'badge-blue'}">${S.started?'Confirmada':'Inscripta'}</span></td>
-    ${!S.started?`<td><button class="btn btn-danger btn-sm" onclick="removePair('${p.id}')">✕</button></td>`:'<td></td>'}
+    ${!S.started?`<td style="white-space:nowrap"><button class="btn btn-secondary btn-sm" onclick="openEditPairInsc('${p.id}')">✏️</button> <button class="btn btn-danger btn-sm" onclick="removePair('${p.id}')">✕</button></td>`:'<td></td>'}
   </tr>`).join('');
   const dayChips=DIAS.map(d=>`<label class="day-chip"><input type="checkbox" id="day_${d}"/> ${d}</label>`).join('');
   const form=S.started
@@ -1380,6 +1380,30 @@ async function savePairEdit(zId,pairId){
   if(!p){toast('No se encontró la pareja');return}
   p.a=a;p.b=b;p.days=days;
   relinkZone(z);
+  await save();closeZoneEdit();renderSupContent();toast('✓ Pareja actualizada');
+}
+function openEditPairInsc(pairId){
+  const p=S.pairs.find(x=>x.id===pairId);if(!p)return;
+  const days=p.days||[];
+  const chips=DIAS.map(d=>`<label class="day-chip"><input type="checkbox" id="edi_day_${d}" ${days.includes(d)?'checked':''}/> ${d}</label>`).join('');
+  document.getElementById('zoneEditBody').innerHTML=`
+    <h2>✏️ Editar pareja</h2>
+    <div class="ig"><label>Jugador 1</label><input id="edi_a" value="${esc(p.a)}"/></div>
+    <div class="ig"><label>Jugador 2</label><input id="edi_b" value="${esc(p.b)}"/></div>
+    <div style="margin-bottom:12px;text-align:left"><span class="day-field-label">Días que pueden jugar (elegí 2)</span><div style="display:flex;gap:8px;flex-wrap:wrap">${chips}</div></div>
+    <div class="modal-btns">
+      <button class="btn btn-primary" onclick="savePairEditInsc('${pairId}')">Guardar</button>
+      <button class="btn btn-secondary" onclick="closeZoneEdit()">Cancelar</button>
+    </div>`;
+  document.getElementById('zoneEditModal').style.display='flex';
+}
+async function savePairEditInsc(pairId){
+  const p=S.pairs.find(x=>x.id===pairId);if(!p){toast('No se encontró la pareja');return}
+  const a=document.getElementById('edi_a').value.trim(),b=document.getElementById('edi_b').value.trim();
+  if(!a||!b){toast('Completá ambos jugadores');return}
+  const days=DIAS.filter(d=>document.getElementById('edi_day_'+d)?.checked);
+  if(days.length!==2){toast('Elegí exactamente 2 días');return}
+  p.a=a;p.b=b;p.days=days;
   await save();closeZoneEdit();renderSupContent();toast('✓ Pareja actualizada');
 }
 function openMovePair(zId,pairId){
