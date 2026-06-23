@@ -456,6 +456,7 @@ function loadT(i){
   S.pairs=t.pairs||[];S.zones=t.zones||[];S.bracket=t.bracket||[];
   S.started=!!t.started;S.bracketBuilt=!!t.bracketBuilt;
   S.courts=t.courts||0;
+  S.published=(typeof t.published==='boolean')?t.published:!!t.started;
   _viewT=i;
 }
 function syncT(){
@@ -464,6 +465,7 @@ function syncT(){
   t.pairs=S.pairs;t.zones=S.zones;t.bracket=S.bracket;
   t.started=S.started;t.bracketBuilt=S.bracketBuilt;
   t.courts=S.courts;
+  t.published=S.published;
 }
 
 async function save(){
@@ -821,6 +823,11 @@ async function setZoneDay(zId,day){
   z.playDay=day||null;
   await save();renderSupContent();
 }
+async function togglePublish(){
+  S.published=!S.published;
+  await save();renderSupContent();
+  toast(S.published?'✓ Zonas publicadas para los jugadores':'🔒 Zonas ocultas para los jugadores',3000);
+}
 function diasTexto(p){return (p&&p.days&&p.days.length)?p.days.map(d=>DIA_ABBR[d]||d).join(', '):'—';}
 function zoneDayBadge(z){
   if(z.playDay)return`<span class="badge" style="background:rgba(255,194,74,.18);color:#ffc24a;border:1px solid rgba(255,194,74,.4)">📅 ${esc(z.playDay)}</span>`;
@@ -909,11 +916,12 @@ async function startTournament(){
   S.zones.forEach(z=>recalcZone(z));
   assignZoneDays(S.zones,S.courts);
   S.started=true;
+  S.published=false;
   refreshDrop();
   await save();
   enableSTab('resultados');enablePTab('resultados');
   if(S.bracketBuilt){enableSTab('bracket');enablePTab('bracket');}
-  showSTab('resultados');toast('¡Torneo iniciado! ✓',3000);
+  showSTab('resultados');toast('¡Zonas armadas! Revisalas y publicalas cuando estén listas 👁️',4500);
 }
 // Días en común de una zona (intersección de los días de sus parejas).
 function zoneDays(ps){
@@ -1026,6 +1034,7 @@ function matchRowHTML(m){
 // RENDER ZONAS / RESULTADOS / BRACKET (jugadores)
 // ═══════════════════════════════════
 function renderZonas(){
+  if(S.started&&!S.published)return`<div class="empty"><div class="ei">🔒</div><p>Las zonas se están preparando.<br>Pronto vas a poder verlas.</p></div>`;
   if(!S.zones.length)return`<div class="empty"><div class="ei">🎯</div><p>${S.started?'Sin zonas aún':'El torneo no ha iniciado'}</p></div>`;
   return`<div class="zones-grid">${S.zones.map(z=>renderZoneCard(z)).join('')}</div>`;
 }
@@ -1045,6 +1054,7 @@ function renderZoneCard(z){
   </div>`;
 }
 function renderResultados(){
+  if(S.started&&!S.published)return`<div class="empty"><div class="ei">🔒</div><p>Los resultados se están preparando.<br>Pronto vas a poder verlos.</p></div>`;
   if(!S.zones.length)return`<div class="empty"><div class="ei">📊</div><p>Sin resultados aún</p></div>`;
   return S.zones.map(z=>{
     const posL=['🥇 1°','🥈 2°','🥉 3°','4°'];
@@ -1080,6 +1090,14 @@ function renderBracketTab(){
 function renderSupResultados(){
   const allDone=S.zones.length>0&&S.zones.every(z=>z.closed);
   let html='';
+  if(S.zones.length){
+    const pub=S.published;
+    html+=`<div class="card" style="border-color:${pub?'var(--accent)':'var(--gold)'};background:${pub?'rgba(0,229,160,.06)':'rgba(255,215,0,.07)'}">
+      <div class="card-title" style="color:${pub?'var(--accent)':'var(--gold)'}">${pub?'👁️ Zonas visibles para los jugadores':'🔒 Zonas ocultas para los jugadores'}</div>
+      <p style="color:var(--text2);font-size:13px;margin-bottom:12px">${pub?'Los jugadores ya pueden ver las zonas y los resultados.':'Los jugadores todavía NO ven las zonas. Hacé los ajustes que necesites (días, parejas) y cuando esté listo, publicá.'}</p>
+      <button class="btn ${pub?'btn-secondary':'btn-gold'}" onclick="togglePublish()">${pub?'🔒 Ocultar a los jugadores':'👁️ Publicar zonas para los jugadores'}</button>
+    </div>`;
+  }
   if(allDone&&!S.bracketBuilt)html+=`<div class="card" style="border-color:var(--gold)"><div class="card-title" style="color:var(--gold)">🏆 Generar Draws</div><button class="btn btn-gold" onclick="buildDrop()">Generar Draws →</button></div>`;
   html+=`<div class="card" style="border-color:rgba(168,85,247,.4)"><div class="card-title" style="color:#a855f7">📲 Publicar / Exportar</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-pub" onclick="openPublish()">📲 Generar Flyer</button><button class="btn btn-secondary" onclick="exportCSV()">⬇️ Descargar resultados (CSV)</button></div></div>`;
   html+=`<div class="wo-hint">💡 Para cargar un W.O. (no presentado): elegí el ganador y guardá sin escribir resultado de sets.</div>`;
