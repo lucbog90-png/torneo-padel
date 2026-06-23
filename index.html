@@ -51,7 +51,7 @@ body::before{content:'';position:fixed;inset:0;background:linear-gradient(rgba(0
 .sponsors-bar{width:100%;background:rgba(0,0,0,.5);border-top:1px solid var(--border);padding:12px 16px calc(12px + var(--safe-bot));backdrop-filter:blur(12px)}
 .sponsors-title{font-size:10px;color:var(--text2);letter-spacing:2px;text-transform:uppercase;text-align:center;margin-bottom:10px}
 .sponsors-list{display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap}
-.sponsor-logo{height:44px;max-width:100px;object-fit:contain;border-radius:6px}
+.sponsor-logo{width:44px;height:44px;object-fit:cover;border-radius:50%;background:#fff;border:1px solid var(--border)}
 .sponsor-name{font-size:10px;color:var(--text2);letter-spacing:1px;text-transform:uppercase}
 
 /* APP HEADER */
@@ -167,7 +167,7 @@ tr:last-child td{border-bottom:none}
 .ad-track{display:inline-flex;flex-shrink:0;will-change:transform}
 .ad-track.ad-go{animation:adscroll linear infinite}
 .ad-set{display:inline-flex;align-items:center;gap:40px;padding-right:40px;flex-shrink:0}
-.ad-set img.ad-img{height:74px;max-height:74px;width:auto;max-width:150px;object-fit:contain;border-radius:6px}
+.ad-set img.ad-img{height:74px;width:74px;max-height:74px;max-width:74px;object-fit:cover;border-radius:50%;background:#fff;border:2px solid rgba(255,255,255,.85);flex-shrink:0}
 .ad-set .ad-text{font-size:18px;color:var(--accent2);font-weight:700;white-space:nowrap;letter-spacing:1px}
 @keyframes adscroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
 .bg-hint{position:fixed;bottom:calc(84px + var(--safe-bot));left:12px;z-index:91;background:rgba(0,0,0,.65);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:10px;color:var(--text2);cursor:pointer;display:flex;align-items:center;gap:5px}
@@ -747,7 +747,7 @@ async function loadBg(inp){const f=inp.files[0];if(!f)return;toast('Subiendo fon
 // ═══════════════════════════════════
 function renderSupTorneo(){
   const spRows=S.sponsors.map((sp,i)=>`<tr>
-    <td>${sp.logoUrl?`<img src="${esc(sp.logoUrl)}" style="height:36px;border-radius:4px"/>`:'—'}</td>
+    <td>${sp.logoUrl?`<img src="${esc(sp.logoUrl)}" style="width:36px;height:36px;object-fit:cover;border-radius:50%;background:#fff;border:1px solid var(--border)"/>`:'—'}</td>
     <td style="font-weight:600">${esc(sp.name)}</td>
     <td><button class="btn btn-danger btn-sm" onclick="removeSponsor(${i})">✕</button></td>
   </tr>`).join('');
@@ -796,7 +796,7 @@ function renderSupTorneo(){
 }
 
 let _spLogoUrl=null;
-async function setSponsorLogo(inp){const f=inp.files[0];if(!f)return;toast('Subiendo logo...');const url=await uploadImage(f,'sponsor');if(!url)return;_spLogoUrl=url;document.getElementById('spLogoPreview').innerHTML=`<img src="${esc(url)}" style="height:40px;border-radius:6px;border:1px solid var(--border)"/>`}
+async function setSponsorLogo(inp){const f=inp.files[0];if(!f)return;toast('Subiendo logo...');const url=await uploadImage(f,'sponsor');if(!url)return;_spLogoUrl=url;document.getElementById('spLogoPreview').innerHTML=`<img src="${esc(url)}" style="width:40px;height:40px;object-fit:cover;border-radius:50%;background:#fff;border:1px solid var(--border)"/>`}
 async function addSponsor(){const name=document.getElementById('spName').value.trim();if(!name&&!_spLogoUrl){toast('Ingresá nombre o logo');return}S.sponsors.push({name:name||'',logoUrl:_spLogoUrl||null});_spLogoUrl=null;await save();renderSponsors();renderAdBanners();renderSupContent();toast('Auspiciante agregado ✓')}
 async function removeSponsor(i){S.sponsors.splice(i,1);await save();renderSponsors();renderAdBanners();renderSupContent()}
 async function clearAdBanner(){S.adDataUrl=null;await save();applyVisuals();renderSupContent();toast('Banner de imagen quitado ✓')}
