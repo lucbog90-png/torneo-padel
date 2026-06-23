@@ -817,7 +817,8 @@ function renderSponsors(){
 // INSCRIPCIÓN
 // ═══════════════════════════════════
 const DIAS=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
-const DIA_ABBR={'Lunes':'Lun','Martes':'Mar','Miércoles':'Mié','Jueves':'Jue','Viernes':'Vie','Sábado':'Sáb'};
+const DIAS_SUP=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+const DIA_ABBR={'Lunes':'Lun','Martes':'Mar','Miércoles':'Mié','Jueves':'Jue','Viernes':'Vie','Sábado':'Sáb','Domingo':'Dom'};
 async function setZoneDay(zId,day){
   const z=getZone(zId);if(!z)return;
   z.playDay=day||null;
@@ -1103,7 +1104,7 @@ function renderSupResultados(){
   html+=`<div class="wo-hint">💡 Para cargar un W.O. (no presentado): elegí el ganador y guardá sin escribir resultado de sets.</div>`;
   S.zones.forEach(z=>{
     html+=`<div class="card"><div class="card-title">📋 ${z.name} ${z.size===4?'<span class="badge badge-blue">4p</span>':''} ${zoneDayBadge(z)} ${z.closed?'<span class="badge badge-green">✓</span>':''}</div>`;
-    html+=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap"><span style="font-size:12px;color:var(--text2)">Día de juego:</span><select onchange="setZoneDay(${z.id},this.value)" style="padding:6px 10px;border-radius:8px;background:rgba(255,255,255,.05);color:var(--text);border:1px solid var(--border);font-size:13px"><option value="">— Sin asignar —</option>${DIAS.map(d=>`<option value="${d}" ${z.playDay===d?'selected':''}>${d}${(z.days&&z.days.includes(d))?' ✓':''}</option>`).join('')}</select>${(z.days&&z.days.length)?`<span style="font-size:11px;color:var(--text2)">pueden: ${z.days.map(d=>DIA_ABBR[d]||d).join('/')}</span>`:''}</div>`;
+    html+=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap"><span style="font-size:12px;color:var(--text2)">Día de juego (podés elegir cualquiera):</span><select onchange="setZoneDay(${z.id},this.value)" style="padding:6px 10px;border-radius:8px;background:rgba(255,255,255,.05);color:var(--text);border:1px solid var(--border);font-size:13px"><option value="">— Sin asignar —</option>${DIAS_SUP.map(d=>`<option value="${d}" ${z.playDay===d?'selected':''}>${d}${(z.days&&z.days.includes(d))?' ✓ (todas pueden)':''}</option>`).join('')}</select>${(z.days&&z.days.length)?`<span style="font-size:11px;color:var(--text2)">parejas marcaron: ${z.days.map(d=>DIA_ABBR[d]||d).join('/')}</span>`:''}</div>`;
     html+=z.matches.map((m,mi)=>renderSupZM(m,z.id,mi)).join('');
     if(!zoneHasResults(z)){
       html+=`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)"><div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">✏️ Editar zona (antes de cargar resultados)</div>`;
