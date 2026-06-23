@@ -455,6 +455,7 @@ function loadT(i){
   S.category=t.category||'';S.description=t.description||'';
   S.pairs=t.pairs||[];S.zones=t.zones||[];S.bracket=t.bracket||[];
   S.started=!!t.started;S.bracketBuilt=!!t.bracketBuilt;
+  S.courts=t.courts||0;
   _viewT=i;
 }
 function syncT(){
@@ -462,6 +463,7 @@ function syncT(){
   t.category=S.category;t.description=S.description;
   t.pairs=S.pairs;t.zones=S.zones;t.bracket=S.bracket;
   t.started=S.started;t.bracketBuilt=S.bracketBuilt;
+  t.courts=S.courts;
 }
 
 async function save(){
@@ -814,7 +816,17 @@ function renderSponsors(){
 // ═══════════════════════════════════
 const DIAS=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
 const DIA_ABBR={'Lunes':'Lun','Martes':'Mar','Miércoles':'Mié','Jueves':'Jue','Viernes':'Vie','Sábado':'Sáb'};
+async function setZoneDay(zId,day){
+  const z=getZone(zId);if(!z)return;
+  z.playDay=day||null;
+  await save();renderSupContent();
+}
 function diasTexto(p){return (p&&p.days&&p.days.length)?p.days.map(d=>DIA_ABBR[d]||d).join(', '):'—';}
+function zoneDayBadge(z){
+  if(z.playDay)return`<span class="badge" style="background:rgba(255,194,74,.18);color:#ffc24a;border:1px solid rgba(255,194,74,.4)">📅 ${esc(z.playDay)}</span>`;
+  if(z.days&&z.days.length)return`<span class="badge" style="background:rgba(255,255,255,.06);color:var(--text2)">📅 ${z.days.map(d=>DIA_ABBR[d]||d).join('/')}</span>`;
+  return`<span class="badge badge-red">Sin día</span>`;
+}
 function renderInscripcion(){
   const rows=S.pairs.map((p,i)=>`<tr>
     <td style="color:var(--text2);font-weight:700">${i+1}</td>
@@ -832,6 +844,9 @@ function renderInscripcion(){
       </div>
       <div style="margin-bottom:12px"><span class="day-field-label">Días que pueden jugar (elegí 2)</span>
         <div style="display:flex;gap:8px;flex-wrap:wrap">${dayChips}</div>
+      </div>
+      <div class="ig" style="max-width:240px;margin-bottom:12px"><label>🏟️ Canchas disponibles (1 cancha = 1 zona por día)</label>
+        <input type="number" min="0" id="courtsInput" value="${S.courts||''}" placeholder="Ej: 3" oninput="S.courts=parseInt(this.value)||0" onblur="save()"/>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
         <button class="btn btn-primary" onclick="addPair()">+ Inscribir</button>
@@ -892,6 +907,7 @@ async function startTournament(){
   S.zones=[];let idx=0,zi=0;
   sizes.forEach(sz=>{const ps=ordered.slice(idx,idx+sz);idx+=sz;S.zones.push(buildZone(zi++,ps))});
   S.zones.forEach(z=>recalcZone(z));
+  assignZoneDays(S.zones,S.courts);
   S.started=true;
   refreshDrop();
   await save();
@@ -906,6 +922,19 @@ function zoneDays(ps){
   let inter=[...withDays[0].days];
   withDays.slice(1).forEach(p=>{inter=inter.filter(d=>p.days.includes(d))});
   return DIAS.filter(d=>inter.includes(d)); // ordenados Mié/Jue/Vie
+}
+// Asigna a cada zona UN día de juego, respetando las canchas (1 cancha = 1 zona por día).
+// Las zonas con menos días posibles se ubican primero. Si no entra, queda sin día (playDay=null).
+function assignZoneDays(zones,courts){
+  const cap=(courts&&courts>0)?courts:Infinity;
+  const load={};DIAS.forEach(d=>load[d]=0);
+  const order=[...zones].sort((a,b)=>(a.days?a.days.length:0)-(b.days?b.days.length:0));
+  order.forEach(z=>{
+    const cands=(z.days||[]).filter(d=>load[d]<cap);
+    if(!cands.length){z.playDay=null;return}
+    cands.sort((d1,d2)=>load[d1]-load[d2]||DIAS.indexOf(d1)-DIAS.indexOf(d2));
+    z.playDay=cands[0];load[z.playDay]++;
+  });
 }
 function buildZone(idx,ps){
   const matches=[];
@@ -1009,7 +1038,7 @@ function renderZoneCard(z){
     :z.pairs.map((p,i)=>`<tr><td style="color:var(--text2)">${i+1}</td><td style="font-weight:600;font-size:12px">${esc(p.a)}<br>${esc(p.b)}</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td></tr>`).join('');
   const matchRows=z.matches.map(m=>matchRowHTML(m)).join('');
   const qualLine=z.qualified.map((q,i)=>`<span>${['🥇','🥈','🥉'][i]} ${esc(q.a)}</span>`).join(' · ');
-  return`<div class="zone-card"><div class="zone-card-title"><span>${z.name} ${z.size===4?'<span class="badge badge-blue">4p</span>':''}</span>${z.closed?'<span class="badge badge-green">✓</span>':''}</div>
+  return`<div class="zone-card"><div class="zone-card-title"><span>${z.name} ${z.size===4?'<span class="badge badge-blue">4p</span>':''} ${zoneDayBadge(z)}</span>${z.closed?'<span class="badge badge-green">✓</span>':''}</div>
     <div class="tbl-wrap" style="margin-bottom:10px"><table class="tbl-zone"><thead><tr><th>Pos</th><th>Pareja</th><th>PG</th><th>Set</th><th>Dif</th><th>Games</th><th>Dif</th></tr></thead><tbody>${stRows}</tbody></table></div>
     ${matchRows}
     ${qualLine?`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:11px;font-weight:600;color:var(--text2)">${qualLine}</div>`:''}
@@ -1055,7 +1084,8 @@ function renderSupResultados(){
   html+=`<div class="card" style="border-color:rgba(168,85,247,.4)"><div class="card-title" style="color:#a855f7">📲 Publicar / Exportar</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-pub" onclick="openPublish()">📲 Generar Flyer</button><button class="btn btn-secondary" onclick="exportCSV()">⬇️ Descargar resultados (CSV)</button></div></div>`;
   html+=`<div class="wo-hint">💡 Para cargar un W.O. (no presentado): elegí el ganador y guardá sin escribir resultado de sets.</div>`;
   S.zones.forEach(z=>{
-    html+=`<div class="card"><div class="card-title">📋 ${z.name} ${z.size===4?'<span class="badge badge-blue">4p</span>':''} ${z.closed?'<span class="badge badge-green">✓</span>':''}</div>`;
+    html+=`<div class="card"><div class="card-title">📋 ${z.name} ${z.size===4?'<span class="badge badge-blue">4p</span>':''} ${zoneDayBadge(z)} ${z.closed?'<span class="badge badge-green">✓</span>':''}</div>`;
+    html+=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap"><span style="font-size:12px;color:var(--text2)">Día de juego:</span><select onchange="setZoneDay(${z.id},this.value)" style="padding:6px 10px;border-radius:8px;background:rgba(255,255,255,.05);color:var(--text);border:1px solid var(--border);font-size:13px"><option value="">— Sin asignar —</option>${DIAS.map(d=>`<option value="${d}" ${z.playDay===d?'selected':''}>${d}${(z.days&&z.days.includes(d))?' ✓':''}</option>`).join('')}</select>${(z.days&&z.days.length)?`<span style="font-size:11px;color:var(--text2)">pueden: ${z.days.map(d=>DIA_ABBR[d]||d).join('/')}</span>`:''}</div>`;
     html+=z.matches.map((m,mi)=>renderSupZM(m,z.id,mi)).join('');
     if(!zoneHasResults(z)){
       html+=`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)"><div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">✏️ Editar zona (antes de cargar resultados)</div>`;
