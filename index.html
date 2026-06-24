@@ -392,11 +392,28 @@ tr:last-child td{border-bottom:none}
 // ═══════════════════════════════════════════════════════════════
 const SB_URL = 'https://dumuyiqehzlsrhdactbp.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR1bXV5aXFlaHpsc3JoZGFjdGJwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4NzM1NjYsImV4cCI6MjA5NjQ0OTU2Nn0.HSOqM5DhL21xWDZ23hgSXDNeaphzbDc1PK_UnFSmcm0';
-const TOURNEY = 'estado';          // clave de la fila de este torneo
 const STORAGE_BUCKET = 'media';     // bucket para logos/fondos/banners
 
 const TABLE = 'torneo';
-const ROW_KEY = TOURNEY;
+// ===== MULTI-CLUB por URL =====
+// Sin ?club  -> muestra el club por defecto (Suardi), que usa la fila existente 'estado' (datos actuales, sin migrar nada).
+// Con ?club  -> cada club usa su propia fila 'club_<nombre>'.
+// Soporta ?club=x3padelsuardi y también el formato corto ?x3padelsuardi
+const DEFAULT_CLUB = 'x3padelsuardi';
+function getClubId(){
+  try{
+    const params=new URLSearchParams(location.search);
+    let c=params.get('club');
+    if(!c){
+      const bare=location.search.replace(/^\?/,'').split('&')[0];
+      if(bare && bare.indexOf('=')===-1) c=bare; // formato corto ?x3padelsuardi
+    }
+    c=(c||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+    return c||DEFAULT_CLUB;
+  }catch(e){return DEFAULT_CLUB}
+}
+const CLUB_ID = getClubId();
+const ROW_KEY = (CLUB_ID===DEFAULT_CLUB) ? 'estado' : ('club_'+CLUB_ID);
 
 // Cliente Supabase (auth + datos + storage)
 const sbc = window.supabase.createClient(SB_URL, SB_KEY);
