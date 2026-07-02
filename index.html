@@ -1001,13 +1001,30 @@ function recalcZone(z){
       else{if(st[m.teamA.id]){st[m.teamA.id].sw+=s.a;st[m.teamA.id].sl+=s.b;st[m.teamA.id].gw+=s.ga||0;st[m.teamA.id].gl+=s.gb||0}if(st[m.teamB.id]){st[m.teamB.id].sw+=s.b;st[m.teamB.id].sl+=s.a;st[m.teamB.id].gw+=s.gb||0;st[m.teamB.id].gl+=s.ga||0}}
     });
   });
-  // Desempate: 1º partidos ganados · 2º (zona 4) mano a mano si se enfrentaron · 3º diferencia de SETS · 4º diferencia de GAMES · 5º puntos de tie-break
-  const tb=(a,b)=>{const dset=(b.setW-b.setL)-(a.setW-a.setL);if(dset)return dset;const dg=(b.sw-b.sl)-(a.sw-a.sl);if(dg)return dg;const dp=(b.gw-b.gl)-(a.gw-a.gl);if(dp)return dp;return b.gw-a.gw};
+  // Desempate: 1º PG · 2º dif SETS · 3º dif GAMES · 4º GAMES ganados · 5º mano a mano · 6º sorteo (con aviso)
   const h2h=(aId,bId)=>{const mm=z.matches.find(m=>m.status==='done'&&m.teamA&&m.teamB&&((m.teamA.id===aId&&m.teamB.id===bId)||(m.teamA.id===bId&&m.teamB.id===aId)));return mm?(mm.winner===aId?-1:mm.winner===bId?1:0):0};
-  z.standings=Object.values(st).sort((a,b)=>{if(b.wins!==a.wins)return b.wins-a.wins;if(z.size===4){const h=h2h(a.pair.id,b.pair.id);if(h)return h}return tb(a,b)});
+  const arb=(id)=>{let hh=0;for(let i=0;i<id.length;i++)hh=(hh*31+id.charCodeAt(i))>>>0;return hh%1000000};
+  const arr=Object.values(st);
+  arr.sort((a,b)=>{if(b.wins!==a.wins)return b.wins-a.wins;const dsa=a.setW-a.setL,dsb=b.setW-b.setL;if(dsb!==dsa)return dsb-dsa;const dga=a.sw-a.sl,dgb=b.sw-b.sl;if(dgb!==dga)return dgb-dga;if(b.sw!==a.sw)return b.sw-a.sw;return 0});
+  const sameGrp=(a,b)=>a.wins===b.wins&&(a.setW-a.setL)===(b.setW-b.setL)&&(a.sw-a.sl)===(b.sw-b.sl)&&a.sw===b.sw;
+  const ordered=[];let gi=0;
+  while(gi<arr.length){
+    let gj=gi;while(gj<arr.length&&sameGrp(arr[gi],arr[gj]))gj++;
+    const grp=arr.slice(gi,gj);
+    if(grp.length===1){grp[0].sorteo=false;ordered.push(grp[0]);}
+    else{
+      grp.forEach(g=>{g._hw=0;grp.forEach(o=>{if(o!==g&&h2h(g.pair.id,o.pair.id)===-1)g._hw++})});
+      grp.sort((a,b)=>{if(b._hw!==a._hw)return b._hw-a._hw;return arb(a.pair.id)-arb(b.pair.id)});
+      grp.forEach(g=>{g.sorteo=grp.some(o=>o!==g&&o._hw===g._hw)});
+      ordered.push(...grp);
+    }
+    gi=gj;
+  }
+  z.standings=ordered;
   z.closed=z.matches.length>0&&z.matches.every(m=>m.status==='done');
   const cupos=z.size===4?3:2;
   z.qualified=z.closed?z.standings.slice(0,cupos).map(s=>s.pair):[];
+  z.sorteoPairs=z.closed?z.standings.filter(s=>s.sorteo).map(s=>s.pair):[];
 }
 
 // ═══════════════════════════════════
@@ -1061,7 +1078,7 @@ function renderZoneCard(z){
   const difN=d=>(d>0?'+':'')+d,difCol=d=>d>0?'var(--accent)':d<0?'var(--danger)':'var(--text2)';
   const cupos=z.size===4?3:2;
   const stRows=z.standings.length
-    ?z.standings.map((s,i)=>{const ds=s.setW-s.setL,dg=s.sw-s.sl;return`<tr class="${i<cupos&&z.closed?'row-qual':''}"><td class="${posClass[i]||''}">${['🥇','🥈','🥉','4°'][i]||i+1}</td><td style="font-weight:600;font-size:12px">${esc(s.pair.a)}<br>${esc(s.pair.b)}</td><td>${s.wins}</td><td style="font-size:11px;color:var(--text2)">${s.setW}-${s.setL}</td><td style="font-size:12px;font-weight:700;color:${difCol(ds)}">${difN(ds)}</td><td style="font-size:11px;color:var(--text2)">${s.sw}-${s.sl}</td><td style="font-size:12px;font-weight:700;color:${difCol(dg)}">${difN(dg)}</td></tr>`}).join('')
+    ?z.standings.map((s,i)=>{const ds=s.setW-s.setL,dg=s.sw-s.sl;return`<tr class="${i<cupos&&z.closed?'row-qual':''}"><td class="${posClass[i]||''}">${['🥇','🥈','🥉','4°'][i]||i+1}</td><td style="font-weight:600;font-size:12px">${esc(s.pair.a)}<br>${esc(s.pair.b)}${s.sorteo?' <span title="Definido por sorteo">🎲</span>':''}</td><td>${s.wins}</td><td style="font-size:11px;color:var(--text2)">${s.setW}-${s.setL}</td><td style="font-size:12px;font-weight:700;color:${difCol(ds)}">${difN(ds)}</td><td style="font-size:11px;color:var(--text2)">${s.sw}-${s.sl}</td><td style="font-size:12px;font-weight:700;color:${difCol(dg)}">${difN(dg)}</td></tr>`}).join('')
     :z.pairs.map((p,i)=>`<tr><td style="color:var(--text2)">${i+1}</td><td style="font-weight:600;font-size:12px">${esc(p.a)}<br>${esc(p.b)}</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td></tr>`).join('');
   const matchRows=z.matches.map(m=>matchRowHTML(m)).join('');
   const qualLine=z.qualified.map((q,i)=>`<span>${['🥇','🥈','🥉'][i]} ${esc(q.a)}</span>`).join(' · ');
@@ -1069,6 +1086,7 @@ function renderZoneCard(z){
     <div class="tbl-wrap" style="margin-bottom:10px"><table class="tbl-zone"><thead><tr><th>Pos</th><th>Pareja</th><th>PG</th><th>Set</th><th>Dif</th><th>Games</th><th>Dif</th></tr></thead><tbody>${stRows}</tbody></table></div>
     ${matchRows}
     ${qualLine?`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:11px;font-weight:600;color:var(--text2)">${qualLine}</div>`:''}
+    ${(z.sorteoPairs&&z.sorteoPairs.length)?`<div style="margin-top:6px;font-size:11px;color:var(--gold);font-weight:600">🎲 Empate total resuelto por sorteo</div>`:''}
   </div>`;
 }
 function renderResultados(){
@@ -1077,8 +1095,9 @@ function renderResultados(){
   return S.zones.map(z=>{
     const posL=['🥇 1°','🥈 2°','🥉 3°','4°'];
     const cupos=z.size===4?3:2;
-    const rows=z.standings.map((s,i)=>{const ds=s.setW-s.setL,dg=s.sw-s.sl;return`<tr class="${i<cupos&&z.closed?'row-qual':''}"><td style="font-weight:700">${posL[i]||i+1}</td><td style="font-weight:600">${esc(s.pair.a)} / ${esc(s.pair.b)}</td><td>${s.wins}</td><td>${s.setW}-${s.setL}</td><td style="font-weight:700;color:${ds>0?'var(--accent)':ds<0?'var(--danger)':'var(--text2)'}">${ds>0?'+':''}${ds}</td><td style="color:var(--text2)">${s.sw}-${s.sl}</td><td style="font-weight:700;color:${dg>0?'var(--accent)':dg<0?'var(--danger)':'var(--text2)'}">${dg>0?'+':''}${dg}</td><td>${i<cupos&&z.closed?'<span class="badge badge-green">Clas.</span>':(z.closed?'<span class="badge badge-red">Elim.</span>':'-')}</td></tr>`}).join('');
-    return`<div class="card"><div class="card-title">📊 ${z.name}</div><div class="tbl-wrap"><table class="tbl-zone"><thead><tr><th>Pos</th><th>Pareja</th><th>PG</th><th>Set</th><th>Dif</th><th>Games</th><th>Dif</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+    const rows=z.standings.map((s,i)=>{const ds=s.setW-s.setL,dg=s.sw-s.sl;return`<tr class="${i<cupos&&z.closed?'row-qual':''}"><td style="font-weight:700">${posL[i]||i+1}</td><td style="font-weight:600">${esc(s.pair.a)} / ${esc(s.pair.b)}${s.sorteo?' 🎲':''}</td><td>${s.wins}</td><td>${s.setW}-${s.setL}</td><td style="font-weight:700;color:${ds>0?'var(--accent)':ds<0?'var(--danger)':'var(--text2)'}">${ds>0?'+':''}${ds}</td><td style="color:var(--text2)">${s.sw}-${s.sl}</td><td style="font-weight:700;color:${dg>0?'var(--accent)':dg<0?'var(--danger)':'var(--text2)'}">${dg>0?'+':''}${dg}</td><td>${i<cupos&&z.closed?'<span class="badge badge-green">Clas.</span>':(z.closed?'<span class="badge badge-red">Elim.</span>':'-')}</td></tr>`}).join('');
+    const sorteoNote=(z.sorteoPairs&&z.sorteoPairs.length)?`<div style="margin-top:8px;font-size:11px;color:var(--gold);font-weight:600">🎲 Empate total: el orden entre ${z.sorteoPairs.map(p=>esc(p.a)).join(', ')} se definió por sorteo.</div>`:'';
+    return`<div class="card"><div class="card-title">📊 ${z.name}</div><div class="tbl-wrap"><table class="tbl-zone"><thead><tr><th>Pos</th><th>Pareja</th><th>PG</th><th>Set</th><th>Dif</th><th>Games</th><th>Dif</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>${sorteoNote}</div>`;
   }).join('');
 }
 function renderBracketTab(){
@@ -1135,7 +1154,8 @@ function renderSupResultados(){
     }
     if(z.closed){
       const ql=z.qualified.map((q,i)=>`<span class="badge badge-green">${['🥇','🥈','🥉'][i]} ${esc(q.a)}</span>`).join(' ');
-      html+=`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)"><div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Clasificados</div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px">${ql}</div><button class="btn btn-secondary btn-sm" onclick="reopenZone(${z.id})">✏️ Corregir zona</button></div>`;
+      const sorteoNote=(z.sorteoPairs&&z.sorteoPairs.length)?`<div style="margin:6px 0 10px;padding:9px 11px;border-radius:8px;background:rgba(255,215,0,.12);border:1px solid var(--gold);font-size:12px;color:var(--gold);line-height:1.45">🎲 <strong>Posición definida por SORTEO.</strong> Estas parejas quedaron empatadas en todo (partidos ganados, games ganados y mano a mano): ${z.sorteoPairs.map(p=>esc(p.a)+'/'+esc(p.b)).join(' · ')}. El orden entre ellas se decidió por sorteo automático — conviene avisarles a los jugadores.</div>`:'';
+      html+=`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)"><div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Clasificados</div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px">${ql}</div>${sorteoNote}<button class="btn btn-secondary btn-sm" onclick="reopenZone(${z.id})">✏️ Corregir zona</button></div>`;
     }
     html+=`</div>`;
   });
@@ -1306,7 +1326,7 @@ function renderBracketTabSup(){
         const schp=m.schedule?`<div class="sch-chip" style="margin-bottom:8px">${m.schedule.day?`<span class="t">📆 ${esc(m.schedule.day)}</span>`:''}${m.schedule.time?`<span class="t">🕐 ${esc(m.schedule.time)}</span>`:''}${m.schedule.court?`<span class="c">🏟️ ${esc(m.schedule.court)}</span>`:''}</div>`:'';
         return`<div class="sup-match"><div class="sup-match-teams" style="color:var(--text2)">${lbl}</div><div style="font-size:11px;color:var(--accent3);margin-bottom:8px">⏳ Las parejas se definen al cerrar la ronda anterior, pero podés dejar el día y horario cargados.</div>${schp}${schForm(m.id,`b${ri}`,m.schedule)}<div><button class="btn btn-secondary btn-sm" onclick="saveBSchedule(${ri},'${m.id}')">🕐 Guardar día y horario</button></div></div>`;
       }
-      if(m.status==='done'){const wn=m.winner===m.teamA?.id?pairName(m.teamA):pairName(m.teamB);const chips=m.sets.map(s=>`<span class="set-chip">${s.a}-${s.b}</span>`).join('')||'<span class="set-chip">W.O.</span>';const sch=m.schedule?`<div class="sch-chip" style="margin-top:5px">${m.schedule.day?`<span class="t">📆 ${esc(m.schedule.day)}</span>`:''}${m.schedule.time?`<span class="t">🕐 ${esc(m.schedule.time)}</span>`:''}${m.schedule.court?`<span class="c">🏟️ ${esc(m.schedule.court)}</span>`:''}</div>`:'';return`<div class="sup-match"><div class="done-result"><span class="badge badge-green">✓</span><div style="display:flex;gap:4px;flex-wrap:wrap">${chips}</div><strong style="color:var(--accent)">${esc(wn)}</strong><button class="btn btn-secondary btn-sm" onclick="reopenBM(${ri},'${m.id}')">✏️</button></div>${sch}</div>`;}
+      if(m.status==='done'){const wn=m.winner===m.teamA?.id?pairName(m.teamA):pairName(m.teamB);const chips=m.sets.map(s=>`<span class="set-chip">${s.a}-${s.b}</span>`).join('')||'<span class="set-chip">W.O.</span>';const sch=m.schedule?`<div class="sch-chip" style="margin-top:5px">${m.schedule.day?`<span class="t">📆 ${esc(m.schedule.day)}</span>`:''}${m.schedule.time?`<span class="t">🕐 ${esc(m.schedule.time)}</span>`:''}${m.schedule.court?`<span class="c">🏟️ ${esc(m.schedule.court)}</span>`:''}</div>`:'';return`<div class="sup-match"><div class="done-result"><span class="badge badge-green">✓</span><div style="display:flex;gap:4px;flex-wrap:wrap">${chips}</div><strong style="color:var(--accent)">${esc(wn)}</strong><button class="btn btn-secondary btn-sm" onclick="reopenBM(${ri},'${m.id}')">✏️</button><button class="btn btn-sm" style="background:#c0392b;color:#fff" onclick="clearBMResult(${ri},'${m.id}')">🗑️ Borrar</button></div>${sch}</div>`;}
       const sets=m.editSets||[{a:'',b:''},{a:'',b:''}];
       const setRows=sets.map((s,i)=>`<div class="score-row"><span class="score-lbl">Set ${i+1}</span><input class="score-in" type="number" min="0" inputmode="numeric" value="${s.a}" id="bs_${ri}_${m.id}_${i}_a"/><span class="vs-sep">-</span><input class="score-in" type="number" min="0" inputmode="numeric" value="${s.b}" id="bs_${ri}_${m.id}_${i}_b"/>${i>0?`<button class="btn btn-secondary btn-sm" onclick="rmBS(${ri},'${m.id}',${i})">✕</button>`:''}</div>`).join('');
       const selA=m.editWinner===m.teamA?.id?'btn-primary':'btn-secondary',selB=m.editWinner===m.teamB?.id?'btn-primary':'btn-secondary';
@@ -1341,6 +1361,21 @@ async function saveBM(ri,mId){
   await save();renderSupContent();toast('✓ Guardado');
 }
 function reopenBM(ri,mId){const m=getBM(ri,mId);if(!m)return;m.editSets=[...m.sets];m.editWinner=m.winner;m.status='pending';m.winner=null;m.sets=[];renderSupContent()}
+async function clearBMResult(ri,mId,doSave=true){
+  const round=S.bracket[ri];if(!round)return;
+  const mi=round.matches.findIndex(x=>x.id===mId);if(mi<0)return;
+  const m=round.matches[mi];
+  if(ri+1<S.bracket.length){
+    const nm=Math.floor(mi/2),nextM=S.bracket[ri+1].matches[nm];
+    if(nextM){
+      if(nextM.status==='done')clearBMResult(ri+1,nextM.id,false);
+      const slot=mi%2===0?'teamA':'teamB',lslot=mi%2===0?'labelA':'labelB';
+      nextM[slot]=null;nextM[lslot]='Por definir';
+    }
+  }
+  m.status='pending';m.winner=null;m.sets=[];delete m.editSets;delete m.editWinner;
+  if(doSave){await save();renderSupContent();toast('Resultado borrado ✓');}
+}
 async function saveBSchedule(ri,mId){
   const m=getBM(ri,mId);if(!m)return;
   const sch=getSchVal(mId,`b${ri}`);
