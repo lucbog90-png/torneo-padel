@@ -255,7 +255,7 @@ tr:last-child td{border-bottom:none}
       <button class="back-btn" onclick="goWelcome()">← Inicio</button>
     </div>
   </header>
-  <nav class="app-nav">
+  <nav class="app-nav" id="playerNav">
     <button class="nav-btn active" id="pnav-zonas" onclick="showPTab('zonas')">Zonas</button>
     <button class="nav-btn" id="pnav-resultados" onclick="showPTab('resultados')" disabled>Resultados</button>
     <button class="nav-btn" id="pnav-bracket" onclick="showPTab('bracket')" disabled>Draws / Llaves</button>
@@ -287,6 +287,7 @@ tr:last-child td{border-bottom:none}
     <button class="nav-btn" id="snav-inscripcion" onclick="showSTab('inscripcion')">Inscripción</button>
     <button class="nav-btn" id="snav-resultados" onclick="showSTab('resultados')" disabled>Resultados</button>
     <button class="nav-btn" id="snav-bracket" onclick="showSTab('bracket')" disabled>Draws</button>
+    <button class="nav-btn" id="snav-liga" onclick="showSTab('liga')">🏅 Liga</button>
     <button class="nav-btn" id="snav-config" onclick="showSTab('config')">Config.</button>
   </nav>
   <main class="app-main" id="supContent"></main>
@@ -373,6 +374,12 @@ tr:last-child td{border-bottom:none}
   </div>
 </div>
 
+<div class="overlay" id="ligaModal" style="display:none">
+  <div class="modal" style="width:min(560px,100%);max-height:90vh;overflow-y:auto">
+    <div id="ligaModalBody"></div>
+  </div>
+</div>
+
 <canvas id="publishCanvas" style="display:none"></canvas>
 <canvas id="dropCanvas" style="display:none"></canvas>
 <div class="toast" id="toast" style="display:none"></div>
@@ -455,7 +462,8 @@ const S={
   pairs:[],zones:[],bracket:[],sponsors:[],
   started:false,bracketBuilt:false,
   logoDataUrl:null,adDataUrl:null,bgDataUrl:null,  // ahora guardan URLs de Storage
-  currentPTab:'zonas',currentSTab:'torneo',
+  currentPTab:'zonas',currentSTab:'torneo',currentPMode:'torneo',
+  liga:{categories:[]},ligaEntry:null,ligaCatId:null,
 };
 
 // ===== MULTI-TORNEO (base) =====
@@ -467,6 +475,18 @@ function migrateT(){
   }
   if(typeof S.activeT!=='number'||S.activeT<0||S.activeT>=S.tournaments.length)S.activeT=0;
 }
+// ===== LIGA (ranking por puntos, compartido por club) =====
+const LIGA_POINTS={campeon:100,finalista:80,semifinalista:60,cuartos:40,octavos:30,dieciseisavos:20,zona:10};
+const LIGA_LABELS={campeon:'🏆 Campeón',finalista:'🥈 Finalista',semifinalista:'🥉 Semifinalista',cuartos:'Cuartos de final',octavos:'Octavos de final',dieciseisavos:'16avos de final',zona:'Quedó en zona'};
+function migrateLiga(){
+  if(!S.liga||typeof S.liga!=='object')S.liga={categories:[]};
+  if(!Array.isArray(S.liga.categories))S.liga.categories=[];
+  S.liga.categories.forEach(c=>{
+    if(!Array.isArray(c.players))c.players=[];
+    if(!Array.isArray(c.history))c.history=[];
+    c.players.forEach(p=>{p.points=p.points||0;p.fechas=p.fechas||0});
+  });
+}
 function loadT(i){
   const t=S.tournaments[i];if(!t)return;
   S.category=t.category||'';S.description=t.description||'';
@@ -474,6 +494,8 @@ function loadT(i){
   S.started=!!t.started;S.bracketBuilt=!!t.bracketBuilt;
   S.courts=t.courts||0;
   S.published=(typeof t.published==='boolean')?t.published:!!t.started;
+  S.ligaEntry=t.ligaEntry||null;
+  S.ligaCatId=t.ligaCatId||null;
   _viewT=i;
 }
 function syncT(){
@@ -483,6 +505,8 @@ function syncT(){
   t.started=S.started;t.bracketBuilt=S.bracketBuilt;
   t.courts=S.courts;
   t.published=S.published;
+  t.ligaEntry=S.ligaEntry;
+  t.ligaCatId=S.ligaCatId;
 }
 
 async function save(){
@@ -492,7 +516,8 @@ async function save(){
     name:S.name,sponsors:S.sponsors,
     logoDataUrl:S.logoDataUrl,adDataUrl:S.adDataUrl,bgDataUrl:S.bgDataUrl,
     tournaments:S.tournaments,activeT:S.activeT,
-    category:S.category,description:S.description,pairs:S.pairs,zones:S.zones,bracket:S.bracket,started:S.started,bracketBuilt:S.bracketBuilt
+    category:S.category,description:S.description,pairs:S.pairs,zones:S.zones,bracket:S.bracket,started:S.started,bracketBuilt:S.bracketBuilt,
+    liga:S.liga
   };
   try{localStorage.setItem('padel_backup_'+ROW_KEY,JSON.stringify(data))}catch(e){}
   await sbUpsert(data);
@@ -502,6 +527,7 @@ function applyState(d){
   if(!d)return;
   S.name=d.name||S.name;S.sponsors=d.sponsors||[];
   S.logoDataUrl=d.logoDataUrl||null;S.adDataUrl=d.adDataUrl||null;S.bgDataUrl=d.bgDataUrl||null;
+  S.liga=d.liga||{categories:[]};migrateLiga();
   if(d.tournaments&&d.tournaments.length){
     S.tournaments=d.tournaments;S.activeT=(typeof d.activeT==='number')?d.activeT:0;
   }else{
@@ -698,6 +724,8 @@ function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classL
 function goWelcome(){stopRefresh();showScreen('welcomeScreen');applyVisuals()}
 function goPlayers(){
   showScreen('playerScreen');applyVisuals();
+  S.currentPMode='torneo';
+  const nav=document.getElementById('playerNav');if(nav)nav.style.display='';
   if(typeof _viewT!=='number'||_viewT<0||!S.tournaments||_viewT>=S.tournaments.length)_viewT=0;
   if(S.tournaments)loadT(_viewT);
   enablePTab('zonas');
@@ -732,14 +760,47 @@ function showSTab(t){S.currentSTab=t;document.querySelectorAll('#supScreen .nav-
 function enableSTab(n){const b=document.getElementById('snav-'+n);if(b)b.disabled=false}
 function disableSTab(n){const b=document.getElementById('snav-'+n);if(b)b.disabled=true}
 
+function playerModeSelector(){
+  if(!S.liga||!S.liga.categories||!S.liga.categories.length)return '';
+  const m=S.currentPMode||'torneo';
+  return`<div style="display:flex;gap:8px;margin-bottom:14px">
+    <button onclick="setPlayerMode('torneo')" style="flex:1;padding:10px;border-radius:10px;border:2px solid ${m==='torneo'?'var(--accent)':'var(--border)'};background:${m==='torneo'?'rgba(0,229,160,.12)':'transparent'};color:${m==='torneo'?'var(--accent)':'var(--text2)'};font-weight:800;letter-spacing:1px;cursor:pointer">🎾 TORNEO</button>
+    <button onclick="setPlayerMode('liga')" style="flex:1;padding:10px;border-radius:10px;border:2px solid ${m==='liga'?'var(--gold)':'var(--border)'};background:${m==='liga'?'rgba(255,215,0,.12)':'transparent'};color:${m==='liga'?'var(--gold)':'var(--text2)'};font-weight:800;letter-spacing:1px;cursor:pointer">🏅 LIGA</button>
+  </div>`;
+}
+function setPlayerMode(mode){
+  S.currentPMode=mode;
+  const nav=document.getElementById('playerNav');
+  if(nav)nav.style.display=(mode==='torneo')?'':'none';
+  renderPlayerContent();
+}
+function selectLigaViewCat(i){S._ligaViewCat=i;renderPlayerContent()}
+function renderLigaPlayerView(){
+  const cats=(S.liga&&S.liga.categories)||[];
+  if(!cats.length)return'<div class="empty"><div class="ei">🏅</div><p>Todavía no hay categorías de Liga cargadas.</p></div>';
+  const sel=(typeof S._ligaViewCat==='number'&&cats[S._ligaViewCat])?S._ligaViewCat:0;
+  const catBtns=cats.length>1?`<div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:10px;margin-bottom:10px;-webkit-overflow-scrolling:touch">${cats.map((c,i)=>`<button onclick="selectLigaViewCat(${i})" style="flex:0 0 auto;padding:8px 16px;border-radius:20px;border:1px solid ${i===sel?'var(--gold)':'var(--border)'};background:${i===sel?'var(--gold)':'transparent'};color:${i===sel?'#3a2c00':'var(--text)'};font-weight:700;font-size:13px;white-space:nowrap;cursor:pointer">${esc(c.name)}</button>`).join('')}</div>`:'';
+  const cat=cats[sel];
+  const ranking=[...cat.players].sort((a,b)=>b.points-a.points||b.fechas-a.fechas);
+  const rows=ranking.map((p,i)=>`<tr><td style="font-weight:700">${['🥇','🥈','🥉'][i]||(i+1)+'°'}</td><td style="font-weight:600">${esc(p.name)}</td><td style="font-weight:700;color:var(--gold)">${p.points}</td><td style="color:var(--text2)">${p.fechas}</td></tr>`).join('');
+  return`<div class="card">
+    <div class="card-title">🏅 Ranking — ${esc(cat.name)}</div>
+    ${catBtns}
+    ${ranking.length?`<div class="tbl-wrap"><table><thead><tr><th>Pos</th><th>Jugador</th><th>Pts</th><th>Fechas</th></tr></thead><tbody>${rows}</tbody></table></div>`:'<p style="color:var(--text2);font-size:13px">Todavía no hay jugadores con puntos en esta categoría.</p>'}
+  </div>`;
+}
 function renderPlayerContent(){
   const c=document.getElementById('playerContent');
+  if((S.currentPMode||'torneo')==='liga'){
+    c.innerHTML=playerModeSelector()+renderLigaPlayerView();
+    return;
+  }
   const m={zonas:renderZonas,resultados:renderResultados,bracket:renderBracketTab};
-  c.innerHTML=playerTSelector()+(m[S.currentPTab]||renderZonas)();
+  c.innerHTML=playerModeSelector()+playerTSelector()+(m[S.currentPTab]||renderZonas)();
 }
 function renderSupContent(){
   const c=document.getElementById('supContent');
-  const m={torneo:renderSupTorneo,inscripcion:renderInscripcion,resultados:renderSupResultados,bracket:renderBracketTabSup,config:renderConfig};
+  const m={torneo:renderSupTorneo,inscripcion:renderInscripcion,resultados:renderSupResultados,bracket:renderBracketTabSup,liga:renderSupLiga,config:renderConfig};
   c.innerHTML=(m[S.currentSTab]||renderSupTorneo)();
 }
 
@@ -788,6 +849,13 @@ function renderSupTorneo(){
     <div class="ig" style="margin-bottom:12px"><label>Descripción</label>
       <textarea rows="2" oninput="S.description=this.value;applyVisuals()" onblur="save()">${esc(S.description)}</textarea>
     </div>
+    ${S.liga&&S.liga.categories&&S.liga.categories.length?`<div class="ig" style="margin-bottom:12px"><label>🏅 Categoría de Liga (opcional)</label>
+      <select onchange="setLigaCatId(this.value)">
+        <option value="">— Torneo libre (sin Liga) —</option>
+        ${S.liga.categories.map(c=>`<option value="${c.id}" ${S.ligaCatId===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}
+      </select>
+      <p style="font-size:11px;color:var(--text2);margin-top:6px">${S.ligaCatId?'⭐ Al sortear, las parejas con más puntos en esta categoría van a ser cabezas de serie (una por zona).':'Si elegís una categoría, el sorteo va a usar el ranking para armar las zonas con cabezas de serie.'}</p>
+    </div>`:''}
     <div class="ig"><label>Logo del torneo</label>
       <label class="upload-area"><div style="font-size:28px">🖼️</div><p>Cargar logo</p>
         <input type="file" accept="image/*" style="display:none" onchange="loadLogoFile(this)"/>
@@ -814,6 +882,7 @@ function renderSupTorneo(){
   </div>`}`;
 }
 
+async function setLigaCatId(v){S.ligaCatId=v||null;await save();renderSupContent();}
 let _spLogoUrl=null;
 async function setSponsorLogo(inp){const f=inp.files[0];if(!f)return;toast('Subiendo logo...');const url=await uploadImage(f,'sponsor');if(!url)return;_spLogoUrl=url;document.getElementById('spLogoPreview').innerHTML=`<img src="${esc(url)}" style="width:40px;height:40px;object-fit:cover;border-radius:50%;background:#000;border:1px solid rgba(255,255,255,.15)"/>`}
 async function addSponsor(){const name=document.getElementById('spName').value.trim();if(!name&&!_spLogoUrl){toast('Ingresá nombre o logo');return}S.sponsors.push({name:name||'',logoUrl:_spLogoUrl||null});_spLogoUrl=null;await save();renderSponsors();renderAdBanners();renderSupContent();toast('Auspiciante agregado ✓')}
@@ -852,6 +921,16 @@ function zoneDayBadge(z){
   if(z.days&&z.days.length)return`<span class="badge" style="background:rgba(255,255,255,.06);color:var(--text2)">📅 ${z.days.map(d=>DIA_ABBR[d]||d).join('/')}</span>`;
   return`<span class="badge badge-red">Sin día</span>`;
 }
+function ligaPlayerNames(){
+  const set=new Set();
+  ((S.liga&&S.liga.categories)||[]).forEach(c=>c.players.forEach(p=>set.add(p.name)));
+  return [...set].sort((a,b)=>a.localeCompare(b,'es'));
+}
+function ligaDatalist(id){
+  const names=ligaPlayerNames();
+  if(!names.length)return'';
+  return`<datalist id="${id}">${names.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>`;
+}
 function renderInscripcion(){
   const rows=S.pairs.map((p,i)=>`<tr>
     <td style="color:var(--text2);font-weight:700">${i+1}</td>
@@ -863,10 +942,12 @@ function renderInscripcion(){
   const dayChips=DIAS.map(d=>`<label class="day-chip"><input type="checkbox" id="day_${d}"/> ${d}</label>`).join('');
   const form=S.started
     ?`<div style="display:flex;align-items:center;gap:10px"><span style="font-size:20px">⚡</span><div><div style="color:var(--accent2);font-size:15px;font-weight:700">Torneo en curso</div><div style="color:var(--text2);font-size:12px">${S.pairs.length} parejas · ${S.zones.length} zonas</div></div></div>`
-    :`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-        <div class="ig"><label>Jugador 1</label><input id="p1a" placeholder="Nombre" onkeydown="if(event.key==='Enter')addPair()"/></div>
-        <div class="ig"><label>Jugador 2</label><input id="p1b" placeholder="Nombre" onkeydown="if(event.key==='Enter')addPair()"/></div>
+    :`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+        <div class="ig"><label>Jugador 1</label><input id="p1a" list="ligaPlayersList" placeholder="Nombre" onkeydown="if(event.key==='Enter')addPair()"/></div>
+        <div class="ig"><label>Jugador 2</label><input id="p1b" list="ligaPlayersList" placeholder="Nombre" onkeydown="if(event.key==='Enter')addPair()"/></div>
       </div>
+      ${ligaPlayerNames().length?`<p style="color:var(--text2);font-size:11px;margin-bottom:10px">💡 Si el jugador ya juega en la Liga, aparece sugerido mientras escribís (así no se duplica en el ranking).</p>`:''}
+      ${ligaDatalist('ligaPlayersList')}
       <div style="margin-bottom:12px"><span class="day-field-label">Días que pueden jugar (elegí 2)</span>
         <div style="display:flex;gap:8px;flex-wrap:wrap">${dayChips}</div>
       </div>
@@ -914,23 +995,47 @@ function partitionZones(n){
   for(let i=0;i<threes;i++)sizes.push(3);
   return sizes; // ej: 7 -> [4,3]; 10 -> [4,3,3]; 6 -> [3,3]
 }
+function pairLigaPoints(p,catId){
+  if(!catId||!S.liga||!S.liga.categories)return 0;
+  const cat=S.liga.categories.find(c=>c.id===catId);if(!cat)return 0;
+  const find=name=>{const pl=cat.players.find(x=>x.name.toLowerCase().trim()===String(name).toLowerCase().trim());return pl?pl.points:0};
+  return find(p.a)+find(p.b);
+}
 async function startTournament(){
   const n=S.pairs.length;
   const sizes=partitionZones(n);
   if(!sizes){toast('No se pudieron armar las zonas con esa cantidad de parejas.',4000);return}
-  // Sorteo por días (regla blanda): agrupo por combinación de días, mezclo dentro
-  // de cada grupo, ordeno los grupos de mayor a menor y recién ahí corto en zonas.
-  // Así las parejas con los mismos días tienden a caer juntas; si un grupo no llena
-  // una zona, se completa con las del grupo siguiente (mezcla solo cuando hace falta).
+  const Z=sizes.length;
+  let seeds=[],rest=[...S.pairs];
+  if(S.ligaCatId){
+    const scored=S.pairs.map(p=>({p,pts:pairLigaPoints(p,S.ligaCatId)}));
+    if(scored.some(x=>x.pts>0)){
+      // shuffle primero (para que los empates, incluidos los de 0 puntos, queden al azar)
+      // y después ordeno de forma ESTABLE por puntaje descendente.
+      const ordScored=shuffle(scored).sort((a,b)=>b.pts-a.pts);
+      const nSeeds=Math.min(Z,ordScored.length);
+      seeds=ordScored.slice(0,nSeeds).map(x=>x.p);
+      rest=ordScored.slice(nSeeds).map(x=>x.p);
+    }
+  }
+  // Sorteo por días (regla blanda) para completar cada zona, igual que antes,
+  // pero ahora sobre las parejas que NO quedaron como cabeza de serie.
   const groups={};
-  S.pairs.forEach(p=>{
+  rest.forEach(p=>{
     const key=(p.days&&p.days.length)?[...p.days].sort().join('|'):'zzz';
     (groups[key]=groups[key]||[]).push(p);
   });
   let ordered=[];
   Object.values(groups).sort((a,b)=>b.length-a.length).forEach(g=>ordered.push(...shuffle(g)));
   S.zones=[];let idx=0,zi=0;
-  sizes.forEach(sz=>{const ps=ordered.slice(idx,idx+sz);idx+=sz;S.zones.push(buildZone(zi++,ps))});
+  sizes.forEach(sz=>{
+    const seed=seeds[zi]?[seeds[zi]]:[];
+    const need=sz-seed.length;
+    const filler=ordered.slice(idx,idx+need);idx+=need;
+    const z=buildZone(zi++,[...seed,...filler]);
+    z.seedPairId=seed[0]?seed[0].id:null;
+    S.zones.push(z);
+  });
   S.zones.forEach(z=>recalcZone(z));
   assignZoneDays(S.zones,S.courts);
   S.started=true;
@@ -939,7 +1044,7 @@ async function startTournament(){
   await save();
   enableSTab('resultados');enablePTab('resultados');
   if(S.bracketBuilt){enableSTab('bracket');enablePTab('bracket');}
-  showSTab('resultados');toast('¡Zonas armadas! Revisalas y publicalas cuando estén listas 👁️',4500);
+  showSTab('resultados');toast(seeds.length?'¡Zonas armadas con cabezas de serie! Revisalas y publicalas 👁️':'¡Zonas armadas! Revisalas y publicalas cuando estén listas 👁️',4500);
 }
 // Días en común de una zona (intersección de los días de sus parejas).
 function zoneDays(ps){
@@ -1078,8 +1183,8 @@ function renderZoneCard(z){
   const difN=d=>(d>0?'+':'')+d,difCol=d=>d>0?'var(--accent)':d<0?'var(--danger)':'var(--text2)';
   const cupos=z.size===4?3:2;
   const stRows=z.standings.length
-    ?z.standings.map((s,i)=>{const ds=s.setW-s.setL,dg=s.sw-s.sl;return`<tr class="${i<cupos&&z.closed?'row-qual':''}"><td class="${posClass[i]||''}">${['🥇','🥈','🥉','4°'][i]||i+1}</td><td style="font-weight:600;font-size:12px">${esc(s.pair.a)}<br>${esc(s.pair.b)}${s.sorteo?' <span title="Definido por sorteo">🎲</span>':''}</td><td>${s.wins}</td><td style="font-size:11px;color:var(--text2)">${s.setW}-${s.setL}</td><td style="font-size:12px;font-weight:700;color:${difCol(ds)}">${difN(ds)}</td><td style="font-size:11px;color:var(--text2)">${s.sw}-${s.sl}</td><td style="font-size:12px;font-weight:700;color:${difCol(dg)}">${difN(dg)}</td></tr>`}).join('')
-    :z.pairs.map((p,i)=>`<tr><td style="color:var(--text2)">${i+1}</td><td style="font-weight:600;font-size:12px">${esc(p.a)}<br>${esc(p.b)}</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td></tr>`).join('');
+    ?z.standings.map((s,i)=>{const ds=s.setW-s.setL,dg=s.sw-s.sl;return`<tr class="${i<cupos&&z.closed?'row-qual':''}"><td class="${posClass[i]||''}">${['🥇','🥈','🥉','4°'][i]||i+1}</td><td style="font-weight:600;font-size:12px">${s.pair.id===z.seedPairId?'<span title="Cabeza de serie">⭐</span> ':''}${esc(s.pair.a)}<br>${esc(s.pair.b)}${s.sorteo?' <span title="Definido por sorteo">🎲</span>':''}</td><td>${s.wins}</td><td style="font-size:11px;color:var(--text2)">${s.setW}-${s.setL}</td><td style="font-size:12px;font-weight:700;color:${difCol(ds)}">${difN(ds)}</td><td style="font-size:11px;color:var(--text2)">${s.sw}-${s.sl}</td><td style="font-size:12px;font-weight:700;color:${difCol(dg)}">${difN(dg)}</td></tr>`}).join('')
+    :z.pairs.map((p,i)=>`<tr><td style="color:var(--text2)">${i+1}</td><td style="font-weight:600;font-size:12px">${p.id===z.seedPairId?'<span title="Cabeza de serie">⭐</span> ':''}${esc(p.a)}<br>${esc(p.b)}</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td></tr>`).join('');
   const matchRows=z.matches.map(m=>matchRowHTML(m)).join('');
   const qualLine=z.qualified.map((q,i)=>`<span>${['🥇','🥈','🥉'][i]} ${esc(q.a)}</span>`).join(' · ');
   return`<div class="zone-card"><div class="zone-card-title"><span>${z.name} ${z.size===4?'<span class="badge badge-blue">4p</span>':''} ${zoneDayBadge(z)}</span>${z.closed?'<span class="badge badge-green">✓</span>':''}</div>
@@ -1095,7 +1200,7 @@ function renderResultados(){
   return S.zones.map(z=>{
     const posL=['🥇 1°','🥈 2°','🥉 3°','4°'];
     const cupos=z.size===4?3:2;
-    const rows=z.standings.map((s,i)=>{const ds=s.setW-s.setL,dg=s.sw-s.sl;return`<tr class="${i<cupos&&z.closed?'row-qual':''}"><td style="font-weight:700">${posL[i]||i+1}</td><td style="font-weight:600">${esc(s.pair.a)} / ${esc(s.pair.b)}${s.sorteo?' 🎲':''}</td><td>${s.wins}</td><td>${s.setW}-${s.setL}</td><td style="font-weight:700;color:${ds>0?'var(--accent)':ds<0?'var(--danger)':'var(--text2)'}">${ds>0?'+':''}${ds}</td><td style="color:var(--text2)">${s.sw}-${s.sl}</td><td style="font-weight:700;color:${dg>0?'var(--accent)':dg<0?'var(--danger)':'var(--text2)'}">${dg>0?'+':''}${dg}</td><td>${i<cupos&&z.closed?'<span class="badge badge-green">Clas.</span>':(z.closed?'<span class="badge badge-red">Elim.</span>':'-')}</td></tr>`}).join('');
+    const rows=z.standings.map((s,i)=>{const ds=s.setW-s.setL,dg=s.sw-s.sl;return`<tr class="${i<cupos&&z.closed?'row-qual':''}"><td style="font-weight:700">${posL[i]||i+1}</td><td style="font-weight:600">${s.pair.id===z.seedPairId?'<span title="Cabeza de serie">⭐</span> ':''}${esc(s.pair.a)} / ${esc(s.pair.b)}${s.sorteo?' 🎲':''}</td><td>${s.wins}</td><td>${s.setW}-${s.setL}</td><td style="font-weight:700;color:${ds>0?'var(--accent)':ds<0?'var(--danger)':'var(--text2)'}">${ds>0?'+':''}${ds}</td><td style="color:var(--text2)">${s.sw}-${s.sl}</td><td style="font-weight:700;color:${dg>0?'var(--accent)':dg<0?'var(--danger)':'var(--text2)'}">${dg>0?'+':''}${dg}</td><td>${i<cupos&&z.closed?'<span class="badge badge-green">Clas.</span>':(z.closed?'<span class="badge badge-red">Elim.</span>':'-')}</td></tr>`}).join('');
     const sorteoNote=(z.sorteoPairs&&z.sorteoPairs.length)?`<div style="margin-top:8px;font-size:11px;color:var(--gold);font-weight:600">🎲 Empate total: el orden entre ${z.sorteoPairs.map(p=>esc(p.a)).join(', ')} se definió por sorteo.</div>`:'';
     return`<div class="card"><div class="card-title">📊 ${z.name}</div><div class="tbl-wrap"><table class="tbl-zone"><thead><tr><th>Pos</th><th>Pareja</th><th>PG</th><th>Set</th><th>Dif</th><th>Games</th><th>Dif</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>${sorteoNote}</div>`;
   }).join('');
@@ -1315,6 +1420,19 @@ function renderBracketTabSup(){
   const fM=S.bracket[S.bracket.length-1]?.matches[0];
   let champ=fM?.winner?(fM.winner===fM.teamA?.id?fM.teamA:fM.teamB):null;
   let html=champ?`<div class="champion-banner"><div class="champion-icon">🏆</div><div class="champion-label">CAMPEÓN</div><div class="champion-name">${esc(champ.a)} / ${esc(champ.b)}</div></div>`:'';
+  if(S.ligaEntry){
+    html+=`<div class="card" style="border-color:var(--accent);background:rgba(0,229,160,.06)">
+      <div class="card-title" style="color:var(--accent)">✅ Fecha cargada a la Liga</div>
+      <p style="color:var(--text2);font-size:13px;margin-bottom:10px">Se sumaron los puntos de esta fecha a <strong>${esc(S.ligaEntry.catName)}</strong> (${esc(S.ligaEntry.label)}).</p>
+      <button class="btn btn-secondary btn-sm" onclick="undoLigaLoad()">↩️ Deshacer carga</button>
+    </div>`;
+  }else if(ligaReady()){
+    html+=`<div class="card" style="border-color:var(--gold);background:rgba(255,215,0,.04)">
+      <div class="card-title" style="color:var(--gold)">🏅 Cargar esta fecha a la Liga</div>
+      <p style="color:var(--text2);font-size:13px;margin-bottom:10px">El cuadro ya está completo. Podés sumar los puntos de esta fecha al ranking de una categoría de Liga.</p>
+      <button class="btn btn-gold" onclick="openLigaClose()">🏆 Cargar fecha a la Liga</button>
+    </div>`;
+  }
   html+=`<div class="card" style="border-color:rgba(168,85,247,.4)"><div class="card-title" style="color:#a855f7">📲 Publicar Partidos</div><button class="btn btn-pub" onclick="openDropPublish()">📲 Descargar imagen de los cruces (historia)</button></div>`;
   html+=`<div class="wo-hint">💡 Para un W.O.: elegí el ganador y guardá sin cargar sets.</div>`;
   S.bracket.forEach((r,ri)=>{
@@ -1342,6 +1460,105 @@ function renderBracketTabSup(){
   });
   html+=`<div class="reset-card"><h3>🗑️ BORRAR TORNEO</h3><p>Borrá todos los datos para iniciar un nuevo torneo.</p><button class="btn btn-reset" onclick="openReset()">🗑️ Borrar y empezar de cero</button></div>`;
   return html;
+}
+// ===== LIGA: cargar puntos de la fecha (según instancia alcanzada en el cuadro) =====
+function ligaReady(){
+  return !!(S.bracketBuilt&&S.bracket.length&&S.bracket[S.bracket.length-1].matches[0]&&S.bracket[S.bracket.length-1].matches[0].status==='done');
+}
+function computeLigaResults(){
+  const N=S.bracket.length;
+  const elim={};
+  if(N){
+    const finalMatch=S.bracket[N-1].matches[0];
+    if(finalMatch&&finalMatch.status==='done'&&finalMatch.teamA&&finalMatch.teamB){
+      const champId=finalMatch.winner,finA=finalMatch.teamA.id,finB=finalMatch.teamB.id;
+      elim[champId]='campeon';
+      elim[champId===finA?finB:finA]='finalista';
+    }
+    const distLabels=['semifinalista','cuartos','octavos','dieciseisavos'];
+    for(let ri=N-2;ri>=0;ri--){
+      const dist=N-2-ri;
+      const label=distLabels[dist]||'dieciseisavos';
+      S.bracket[ri].matches.forEach(m=>{
+        if(m.status==='done'&&!m.isBye&&m.teamA&&m.teamB){
+          const loserId=m.winner===m.teamA.id?m.teamB.id:m.teamA.id;
+          if(!elim[loserId])elim[loserId]=label;
+        }
+      });
+    }
+  }
+  return S.pairs.map(p=>{const instancia=elim[p.id]||'zona';return{pairId:p.id,a:p.a,b:p.b,instancia,points:LIGA_POINTS[instancia]}});
+}
+let _ligaPreview=null;
+function openLigaClose(){
+  migrateLiga();
+  if(!ligaReady()){toast('El cuadro todavía no terminó');return}
+  if(!S.liga.categories.length){
+    showConfirm('Sin categorías de Liga','Todavía no creaste ninguna categoría de Liga. ¿Querés ir a crearla ahora?','var(--gold)','Ir a Liga',()=>{showSTab('liga')});
+    return;
+  }
+  _ligaPreview=computeLigaResults();
+  renderLigaCloseModal();
+}
+function renderLigaCloseModal(){
+  const opts=S.liga.categories.map((c,i)=>`<option value="${i}" ${S.ligaCatId===c.id?'selected':''}>${esc(c.name)}</option>`).join('');
+  const hasDefault=S.ligaCatId&&S.liga.categories.some(c=>c.id===S.ligaCatId);
+  const rows=_ligaPreview.map(r=>`<tr><td style="font-size:12px">${esc(r.a)}<br>${esc(r.b)}</td><td style="font-size:12px">${LIGA_LABELS[r.instancia]}</td><td style="font-weight:700;color:var(--gold)">+${r.points}</td></tr>`).join('');
+  document.getElementById('ligaModalBody').innerHTML=`
+    <h2 style="color:var(--gold)">🏅 Cargar fecha a la Liga</h2>
+    <div class="ig" style="margin-bottom:10px"><label>Categoría</label>
+      <select id="ligaCloseCat">${(S.liga.categories.length>1&&!hasDefault)?'<option value="">Elegí una categoría...</option>':''}${opts}</select>
+    </div>
+    <div class="ig" style="margin-bottom:12px"><label>Nombre de la fecha</label>
+      <input id="ligaCloseLabel" placeholder="Ej: Suma 12 - Fecha 1" value="${esc(S.category||'Fecha')}"/>
+    </div>
+    <p style="color:var(--text2);font-size:12px;margin-bottom:8px">Así quedarían los puntos de esta fecha (se suman al total de cada jugador):</p>
+    <div class="tbl-wrap" style="max-height:280px;overflow-y:auto"><table><thead><tr><th>Pareja</th><th>Instancia</th><th>Pts</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="modal-btns">
+      <button class="btn btn-gold" onclick="confirmLigaClose()">✅ Confirmar y sumar puntos</button>
+      <button class="btn btn-secondary" onclick="closeLigaModal()">Cancelar</button>
+    </div>`;
+  document.getElementById('ligaModal').style.display='flex';
+}
+function closeLigaModal(){document.getElementById('ligaModal').style.display='none';_ligaPreview=null}
+async function confirmLigaClose(){
+  const sel=document.getElementById('ligaCloseCat');
+  const idx=sel&&sel.value!==''?parseInt(sel.value):NaN;
+  if(isNaN(idx)||!S.liga.categories[idx]){toast('Elegí una categoría');return}
+  const label=(document.getElementById('ligaCloseLabel').value||'Fecha').trim();
+  const cat=S.liga.categories[idx];
+  const historyId=uid();
+  const entries=[];
+  _ligaPreview.forEach(r=>{
+    [r.a,r.b].forEach(name=>{
+      let pl=cat.players.find(p=>p.name.toLowerCase().trim()===String(name).toLowerCase().trim());
+      if(!pl){pl={id:uid(),name:name,points:0,fechas:0};cat.players.push(pl)}
+      pl.points+=r.points;pl.fechas+=1;
+      entries.push({playerId:pl.id,playerName:name,instancia:r.instancia,points:r.points});
+    });
+  });
+  const date=new Date().toISOString().slice(0,10);
+  cat.history.push({id:historyId,label,date,entries});
+  S.ligaEntry={catId:cat.id,catName:cat.name,historyId,label,date};
+  await save();closeLigaModal();renderSupContent();toast('✓ Fecha cargada a la Liga');
+}
+async function undoLigaLoad(){
+  if(!S.ligaEntry)return;
+  const {catId,historyId}=S.ligaEntry;
+  const cat=S.liga.categories.find(c=>c.id===catId);
+  if(cat){
+    const hIdx=cat.history.findIndex(h=>h.id===historyId);
+    if(hIdx>=0){
+      const h=cat.history[hIdx];
+      h.entries.forEach(e=>{
+        const pl=cat.players.find(p=>p.id===e.playerId);
+        if(pl){pl.points=Math.max(0,pl.points-e.points);pl.fechas=Math.max(0,pl.fechas-1)}
+      });
+      cat.history.splice(hIdx,1);
+    }
+  }
+  S.ligaEntry=null;
+  await save();renderSupContent();toast('Se deshizo la carga a la Liga ✓');
 }
 function getBM(ri,mId){return S.bracket[ri]?.matches.find(m=>m.id===mId)}
 function collectBS(ri,mId,sets){return sets.map((_,i)=>({a:parseInt(document.getElementById(`bs_${ri}_${mId}_${i}_a`)?.value)||0,b:parseInt(document.getElementById(`bs_${ri}_${mId}_${i}_b`)?.value)||0}))}
@@ -1489,8 +1706,9 @@ function openEditPairInsc(pairId){
   const chips=DIAS.map(d=>`<label class="day-chip"><input type="checkbox" id="edi_day_${d}" ${days.includes(d)?'checked':''}/> ${d}</label>`).join('');
   document.getElementById('zoneEditBody').innerHTML=`
     <h2>✏️ Editar pareja</h2>
-    <div class="ig"><label>Jugador 1</label><input id="edi_a" value="${esc(p.a)}"/></div>
-    <div class="ig"><label>Jugador 2</label><input id="edi_b" value="${esc(p.b)}"/></div>
+    <div class="ig"><label>Jugador 1</label><input id="edi_a" list="ligaPlayersListEdit" value="${esc(p.a)}"/></div>
+    <div class="ig"><label>Jugador 2</label><input id="edi_b" list="ligaPlayersListEdit" value="${esc(p.b)}"/></div>
+    ${ligaDatalist('ligaPlayersListEdit')}
     <div style="margin-bottom:12px;text-align:left"><span class="day-field-label">Días que pueden jugar (elegí 2)</span><div style="display:flex;gap:8px;flex-wrap:wrap">${chips}</div></div>
     <div class="modal-btns">
       <button class="btn btn-primary" onclick="savePairEditInsc('${pairId}')">Guardar</button>
@@ -1587,6 +1805,84 @@ function exportBackup(){
     setTimeout(()=>URL.revokeObjectURL(url),1500);
     toast('✓ Backup descargado');
   }catch(e){toast('⚠️ No se pudo generar el backup',3500)}
+}
+
+// ═══════════════════════════════════
+// LIGA (ranking por categoría, compartido por el club)
+// ═══════════════════════════════════
+function renderSupLiga(){
+  migrateLiga();
+  const cats=S.liga.categories;
+  const sel=(typeof S._ligaSel==='number'&&cats[S._ligaSel])?S._ligaSel:null;
+  const catBtns=cats.map((c,i)=>`<button onclick="selectLigaCat(${i})" style="padding:8px 14px;border-radius:20px;border:1px solid ${i===sel?'var(--gold)':'var(--border)'};background:${i===sel?'var(--gold)':'transparent'};color:${i===sel?'#3a2c00':'var(--text)'};font-weight:700;font-size:13px;cursor:pointer">${esc(c.name)}</button>`).join('');
+  let html=`<div class="card">
+    <div class="card-title">🏅 Categorías de Liga</div>
+    <p style="color:var(--text2);font-size:13px;margin-bottom:12px">Cada categoría (ej. "Suma 12 Caballeros") tiene su propio plantel de jugadores y su propio ranking. Los puntos se suman automáticamente cada vez que cargás una fecha desde la pestaña Draws.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">${catBtns}</div>
+    <button class="btn btn-primary btn-sm" onclick="newLigaCategory()">+ Nueva categoría</button>
+  </div>`;
+  if(sel===null){
+    html+=`<div class="empty"><div class="ei">🏅</div><p>Elegí o creá una categoría para gestionar sus jugadores y ver el ranking.</p></div>`;
+    return html;
+  }
+  const cat=cats[sel];
+  const ranking=[...cat.players].sort((a,b)=>b.points-a.points||b.fechas-a.fechas);
+  const playerRows=ranking.map((p,i)=>`<tr><td>${i+1}°</td><td style="font-weight:600">${esc(p.name)}</td><td style="font-weight:700;color:var(--gold)">${p.points}</td><td style="color:var(--text2)">${p.fechas}</td><td><button class="btn btn-danger btn-sm" onclick="removeLigaPlayer(${sel},'${p.id}')">🗑️</button></td></tr>`).join('');
+  const histRows=cat.history.length?cat.history.slice().reverse().map(h=>`<div style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;font-size:12px"><strong>${esc(h.label)}</strong> <span style="color:var(--text2)">— ${h.date} · ${h.entries.length} jugadores</span></div>`).join(''):'';
+  html+=`<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+      <div class="card-title" style="margin-bottom:0">🏆 ${esc(cat.name)}</div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-secondary btn-sm" onclick="renameLigaCategory(${sel})">✏️ Renombrar</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteLigaCategory(${sel})">🗑️ Borrar categoría</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+      <input id="ligaPlayerName" placeholder="Nombre y apellido del jugador" style="flex:1;min-width:180px" onkeydown="if(event.key==='Enter')addLigaPlayer(${sel})"/>
+      <button class="btn btn-primary btn-sm" onclick="addLigaPlayer(${sel})">+ Agregar jugador</button>
+    </div>
+    ${cat.players.length?`<div class="tbl-wrap"><table><thead><tr><th>Pos</th><th>Jugador</th><th>Pts</th><th>Fechas</th><th></th></tr></thead><tbody>${playerRows}</tbody></table></div>`:'<p style="color:var(--text2);font-size:13px">Todavía no cargaste jugadores en esta categoría.</p>'}
+  </div>
+  ${histRows?`<div class="card"><div class="card-title">📅 Fechas cargadas</div>${histRows}</div>`:''}`;
+  return html;
+}
+function newLigaCategory(){
+  showPrompt('Nueva categoría de Liga','Ej: Suma 12 Caballeros','',name=>{
+    S.liga.categories.push({id:uid(),name,players:[],history:[]});
+    S._ligaSel=S.liga.categories.length-1;
+    save();renderSupContent();toast('✓ Categoría creada');
+  });
+}
+function selectLigaCat(i){S._ligaSel=i;renderSupContent()}
+function renameLigaCategory(i){
+  const c=S.liga.categories[i];if(!c)return;
+  showPrompt('Renombrar categoría',c.name,c.name,name=>{c.name=name;save();renderSupContent();toast('✓ Renombrado')});
+}
+function deleteLigaCategory(i){
+  const c=S.liga.categories[i];if(!c)return;
+  showConfirm('⚠️ BORRAR CATEGORÍA','Se eliminará <strong>'+esc(c.name)+'</strong> y todo su ranking. No se puede deshacer.','var(--danger)','🗑️ Sí, borrar',()=>{
+    S.liga.categories.splice(i,1);
+    S._ligaSel=S.liga.categories.length?Math.min(i,S.liga.categories.length-1):null;
+    save();renderSupContent();toast('Categoría borrada ✓');
+  });
+}
+async function addLigaPlayer(catIdx){
+  const c=S.liga.categories[catIdx];if(!c)return;
+  const inp=document.getElementById('ligaPlayerName');
+  const name=(inp.value||'').trim();
+  if(!name){toast('Escribí un nombre');return}
+  if(c.players.some(p=>p.name.toLowerCase().trim()===name.toLowerCase())){toast('Ese jugador ya está en la lista');return}
+  c.players.push({id:uid(),name,points:0,fechas:0});
+  inp.value='';
+  await save();renderSupContent();toast('✓ Jugador agregado');
+}
+function removeLigaPlayer(catIdx,pid){
+  const c=S.liga.categories[catIdx];if(!c)return;
+  const p=c.players.find(x=>x.id===pid);if(!p)return;
+  showConfirm('Quitar jugador','¿Quitar a <strong>'+esc(p.name)+'</strong> de la categoría? Se van a perder sus puntos acumulados.','var(--danger)','Sí, quitar',async()=>{
+    c.players=c.players.filter(x=>x.id!==pid);
+    await save();renderSupContent();toast('Jugador quitado');
+  });
 }
 
 // ═══════════════════════════════════
