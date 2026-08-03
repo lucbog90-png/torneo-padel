@@ -1,42 +1,37 @@
-// Service worker — permite instalar la app y un uso offline básico.
-// Nunca cachea las llamadas a Supabase (los datos del torneo siempre van frescos).
-const CACHE = 'padel-v1';
-const ASSETS = ['./', './index.html', './manifest.json'];
+// sw.js — Service Worker "network-first"
+// Siempre intenta traer la última versión desde internet.
+// Si no hay conexión, usa la copia guardada (para que la app abra igual sin internet).
+const CACHE = 'torneo-padel-20260702';
 
-self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).catch(() => {}));
+self.addEventListener('install', (e) => {
+  // Activa la versión nueva enseguida, sin esperar.
   self.skipWaiting();
 });
 
-self.addEventListener('activate', e => {
-  e.waitUntil(
-    caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k))))
-  );
-  self.clients.claim();
+self.addEventListener('activate', (e) => {
+  e.waitUntil((async () => {
+    // Borra cachés viejos de versiones anteriores.
+    const keys = await caches.keys();
+    await Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)));
+    await self.clients.claim();
+  })());
 });
 
-self.addEventListener('fetch', e => {
+self.addEventListener('fetch', (e) => {
   const req = e.request;
-  if (req.method !== 'GET') return;
-  const url = new URL(req.url);
-
-  // No interceptar Supabase (datos y storage siempre desde la red)
-  if (url.hostname.endsWith('supabase.co') || url.hostname.endsWith('supabase.in')) return;
-
-  // Navegación: red primero, cache como respaldo
-  if (req.mode === 'navigate') {
-    e.respondWith(
-      fetch(req)
-        .then(r => { const cp = r.clone(); caches.open(CACHE).then(c => c.put(req, cp)); return r; })
-        .catch(() => caches.match(req).then(m => m || caches.match('./index.html')))
-    );
-    return;
-  }
-
-  // Resto de GET (fuentes, SDK): cache primero, luego red
-  e.respondWith(
-    caches.match(req).then(m => m || fetch(req).then(r => {
-      const cp = r.clone(); caches.open(CACHE).then(c => c.put(req, cp)); return r;
-    }).catch(() => m))
-  );
+  if (req.method !== 'GET') return; // solo lecturas
+  e.respondWith((async () => {
+    try {
+      // 1) Primero la red (versión más nueva)
+      const fresh = await fetch(req);
+      const cache = await caches.open(CACHE);
+      cache.put(req, fresh.clone()).catch(() => {});
+      return fresh;
+    } catch (err) {
+      // 2) Sin internet: usa la copia guardada
+      const cached = await caches.match(req);
+      if (cached) return cached;
+      throw err;
+    }
+  })());
 });
