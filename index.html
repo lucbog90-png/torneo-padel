@@ -484,7 +484,12 @@ function migrateLiga(){
   S.liga.categories.forEach(c=>{
     if(!Array.isArray(c.players))c.players=[];
     if(!Array.isArray(c.history))c.history=[];
-    c.players.forEach(p=>{p.points=p.points||0;p.fechas=p.fechas||0});
+    c.players.forEach(p=>{
+      p.points=p.points||0;p.fechas=p.fechas||0;
+      p.pj=p.pj||0;p.pg=p.pg||0;p.pp=p.pp||0;
+      p.sj=p.sj||0;p.sg=p.sg||0;p.sp=p.sp||0;
+      p.gj=p.gj||0;p.gg=p.gg||0;p.gp=p.gp||0;
+    });
   });
 }
 function loadT(i){
@@ -782,11 +787,11 @@ function renderLigaPlayerView(){
   const catBtns=cats.length>1?`<div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:10px;margin-bottom:10px;-webkit-overflow-scrolling:touch">${cats.map((c,i)=>`<button onclick="selectLigaViewCat(${i})" style="flex:0 0 auto;padding:8px 16px;border-radius:20px;border:1px solid ${i===sel?'var(--gold)':'var(--border)'};background:${i===sel?'var(--gold)':'transparent'};color:${i===sel?'#3a2c00':'var(--text)'};font-weight:700;font-size:13px;white-space:nowrap;cursor:pointer">${esc(c.name)}</button>`).join('')}</div>`:'';
   const cat=cats[sel];
   const ranking=[...cat.players].sort((a,b)=>b.points-a.points||b.fechas-a.fechas);
-  const rows=ranking.map((p,i)=>`<tr><td style="font-weight:700">${['🥇','🥈','🥉'][i]||(i+1)+'°'}</td><td style="font-weight:600">${esc(p.name)}</td><td style="font-weight:700;color:var(--gold)">${p.points}</td><td style="color:var(--text2)">${p.fechas}</td></tr>`).join('');
+  const rows=ranking.map((p,i)=>`<tr><td style="font-weight:700">${['🥇','🥈','🥉'][i]||(i+1)+'°'}</td><td style="font-weight:600">${esc(p.name)}</td><td style="font-weight:700;color:var(--gold)">${p.points}</td><td style="color:var(--text2)">${p.fechas}</td><td><button class="btn btn-secondary btn-sm" onclick="openPlayerStats(${sel},'${p.id}')">📊</button></td></tr>`).join('');
   return`<div class="card">
     <div class="card-title">🏅 Ranking — ${esc(cat.name)}</div>
     ${catBtns}
-    ${ranking.length?`<div class="tbl-wrap"><table><thead><tr><th>Pos</th><th>Jugador</th><th>Pts</th><th>Fechas</th></tr></thead><tbody>${rows}</tbody></table></div>`:'<p style="color:var(--text2);font-size:13px">Todavía no hay jugadores con puntos en esta categoría.</p>'}
+    ${ranking.length?`<div class="tbl-wrap"><table><thead><tr><th>Pos</th><th>Jugador</th><th>Pts</th><th>Fechas</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`:'<p style="color:var(--text2);font-size:13px">Todavía no hay jugadores con puntos en esta categoría.</p>'}
   </div>`;
 }
 function renderPlayerContent(){
@@ -1498,6 +1503,27 @@ function computeLigaResults(){
   }
   return S.pairs.map(p=>{const instancia=elim[p.id]||'zona';return{pairId:p.id,a:p.a,b:p.b,instancia,points:LIGA_POINTS[instancia]}});
 }
+function computePairMatchStats(pairId){
+  const st={pj:0,pg:0,pp:0,sj:0,sg:0,sp:0,gj:0,gg:0,gp:0};
+  const scan=(matches)=>{
+    (matches||[]).forEach(m=>{
+      if(m.status!=='done'||!m.teamA||!m.teamB)return;
+      const isA=m.teamA.id===pairId,isB=m.teamB.id===pairId;
+      if(!isA&&!isB)return;
+      st.pj++;
+      if(m.winner===pairId)st.pg++;else st.pp++;
+      (m.sets||[]).forEach(s=>{
+        const mine=isA?(s.a||0):(s.b||0),theirs=isA?(s.b||0):(s.a||0);
+        st.sj++;
+        if(mine>theirs)st.sg++;else if(theirs>mine)st.sp++;
+        st.gj+=mine+theirs;st.gg+=mine;st.gp+=theirs;
+      });
+    });
+  };
+  S.zones.forEach(z=>scan(z.matches));
+  S.bracket.forEach(r=>scan(r.matches));
+  return st;
+}
 let _ligaPreview=null;
 function openLigaClose(){
   migrateLiga();
@@ -1530,6 +1556,27 @@ function renderLigaCloseModal(){
   document.getElementById('ligaModal').style.display='flex';
 }
 function closeLigaModal(){document.getElementById('ligaModal').style.display='none';_ligaPreview=null}
+function pctStr(w,total){return total>0?(w/total*100).toFixed(2)+'%':'—'}
+function openPlayerStats(catIdx,playerId){
+  const cat=S.liga.categories[catIdx];if(!cat)return;
+  const p=cat.players.find(x=>x.id===playerId);if(!p)return;
+  const block=(title,color,j,g,l)=>`
+    <div style="background:${color}22;border:1px solid ${color}55;border-radius:10px;padding:10px 14px;margin-bottom:10px">
+      <div style="font-weight:800;color:${color};font-size:12px;letter-spacing:1px;margin-bottom:8px">${title}</div>
+      <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:4px"><span style="color:var(--text2)">Jugados</span><strong>${j}</strong></div>
+      <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:4px"><span style="color:var(--text2)">Ganados</span><strong style="color:var(--accent)">${g}</strong></div>
+      <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:4px"><span style="color:var(--text2)">Perdidos</span><strong style="color:var(--danger)">${l}</strong></div>
+      <div style="display:flex;justify-content:space-between;font-size:12.5px"><span style="color:var(--text2)">Efectividad</span><strong>${pctStr(g,j)}</strong></div>
+    </div>`;
+  document.getElementById('ligaModalBody').innerHTML=`
+    <h2 style="margin-bottom:2px">📊 ${esc(p.name)}</h2>
+    <p style="color:var(--text2);font-size:12px;margin-bottom:14px">${esc(cat.name)} · ${p.points} pts totales · ${p.fechas} fechas jugadas</p>
+    ${block('PARTIDOS','#00e5a0',p.pj||0,p.pg||0,p.pp||0)}
+    ${block('SETS','#ffd76a',p.sj||0,p.sg||0,p.sp||0)}
+    ${block('GAMES','#7CF7C4',p.gj||0,p.gg||0,p.gp||0)}
+    <div class="modal-btns"><button class="btn btn-secondary" onclick="closeLigaModal()">Cerrar</button></div>`;
+  document.getElementById('ligaModal').style.display='flex';
+}
 async function confirmLigaClose(){
   const sel=document.getElementById('ligaCloseCat');
   const idx=sel&&sel.value!==''?parseInt(sel.value):NaN;
@@ -1539,11 +1586,15 @@ async function confirmLigaClose(){
   const historyId=uid();
   const entries=[];
   _ligaPreview.forEach(r=>{
+    const st=computePairMatchStats(r.pairId);
     [r.a,r.b].forEach(name=>{
       let pl=cat.players.find(p=>p.name.toLowerCase().trim()===String(name).toLowerCase().trim());
-      if(!pl){pl={id:uid(),name:name,points:0,fechas:0};cat.players.push(pl)}
+      if(!pl){pl={id:uid(),name:name,points:0,fechas:0,pj:0,pg:0,pp:0,sj:0,sg:0,sp:0,gj:0,gg:0,gp:0};cat.players.push(pl)}
       pl.points+=r.points;pl.fechas+=1;
-      entries.push({playerId:pl.id,playerName:name,instancia:r.instancia,points:r.points});
+      pl.pj=(pl.pj||0)+st.pj;pl.pg=(pl.pg||0)+st.pg;pl.pp=(pl.pp||0)+st.pp;
+      pl.sj=(pl.sj||0)+st.sj;pl.sg=(pl.sg||0)+st.sg;pl.sp=(pl.sp||0)+st.sp;
+      pl.gj=(pl.gj||0)+st.gj;pl.gg=(pl.gg||0)+st.gg;pl.gp=(pl.gp||0)+st.gp;
+      entries.push({playerId:pl.id,playerName:name,instancia:r.instancia,points:r.points,stats:st});
     });
   });
   const date=new Date().toISOString().slice(0,10);
@@ -1561,7 +1612,14 @@ async function undoLigaLoad(){
       const h=cat.history[hIdx];
       h.entries.forEach(e=>{
         const pl=cat.players.find(p=>p.id===e.playerId);
-        if(pl){pl.points=Math.max(0,pl.points-e.points);pl.fechas=Math.max(0,pl.fechas-1)}
+        if(pl){
+          pl.points=Math.max(0,pl.points-e.points);pl.fechas=Math.max(0,pl.fechas-1);
+          if(e.stats){
+            pl.pj=Math.max(0,(pl.pj||0)-e.stats.pj);pl.pg=Math.max(0,(pl.pg||0)-e.stats.pg);pl.pp=Math.max(0,(pl.pp||0)-e.stats.pp);
+            pl.sj=Math.max(0,(pl.sj||0)-e.stats.sj);pl.sg=Math.max(0,(pl.sg||0)-e.stats.sg);pl.sp=Math.max(0,(pl.sp||0)-e.stats.sp);
+            pl.gj=Math.max(0,(pl.gj||0)-e.stats.gj);pl.gg=Math.max(0,(pl.gg||0)-e.stats.gg);pl.gp=Math.max(0,(pl.gp||0)-e.stats.gp);
+          }
+        }
       });
       cat.history.splice(hIdx,1);
     }
@@ -1850,7 +1908,7 @@ function renderSupLiga(){
   }
   const cat=cats[sel];
   const ranking=[...cat.players].sort((a,b)=>b.points-a.points||b.fechas-a.fechas);
-  const playerRows=ranking.map((p,i)=>`<tr><td>${i+1}°</td><td style="font-weight:600">${esc(p.name)}</td><td style="font-weight:700;color:var(--gold)">${p.points}</td><td style="color:var(--text2)">${p.fechas}</td><td><button class="btn btn-danger btn-sm" onclick="removeLigaPlayer(${sel},'${p.id}')">🗑️</button></td></tr>`).join('');
+  const playerRows=ranking.map((p,i)=>`<tr><td>${i+1}°</td><td style="font-weight:600">${esc(p.name)}</td><td style="font-weight:700;color:var(--gold)">${p.points}</td><td style="color:var(--text2)">${p.fechas}</td><td style="display:flex;gap:4px"><button class="btn btn-secondary btn-sm" onclick="openPlayerStats(${sel},'${p.id}')">📊</button><button class="btn btn-danger btn-sm" onclick="removeLigaPlayer(${sel},'${p.id}')">🗑️</button></td></tr>`).join('');
   const histRows=cat.history.length?cat.history.slice().reverse().map(h=>`<div style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;font-size:12px"><strong>${esc(h.label)}</strong> <span style="color:var(--text2)">— ${h.date} · ${h.entries.length} jugadores</span></div>`).join(''):'';
   html+=`<div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
