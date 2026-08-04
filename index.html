@@ -1908,8 +1908,36 @@ async function doSwapPair(srcId,pairId,dstId,otherId){
 // ═══════════════════════════════════
 // CONFIG
 // ═══════════════════════════════════
+// ===== VISITAS (contador simple por club) =====
+function todayLocalISO(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+async function logVisit(){
+  try{await sbc.from('visits').insert({club_id:CLUB_ID,day:todayLocalISO()})}catch(e){/* silencioso: si la tabla no existe aún, no rompe nada */}
+}
+async function loadVisitStats(){
+  const boxT=document.getElementById('visitToday'),boxA=document.getElementById('visitTotal');
+  if(!boxT||!boxA)return;
+  boxT.textContent='…';boxA.textContent='…';
+  try{
+    const today=todayLocalISO();
+    const r1=await sbc.from('visits').select('*',{count:'exact',head:true}).eq('club_id',CLUB_ID).eq('day',today);
+    const r2=await sbc.from('visits').select('*',{count:'exact',head:true}).eq('club_id',CLUB_ID);
+    boxT.textContent=(r1.count??0);
+    boxA.textContent=(r2.count??0);
+  }catch(e){
+    boxT.textContent='—';boxA.textContent='—';
+  }
+}
 function renderConfig(){
+  setTimeout(loadVisitStats,80);
   return`<div class="grid2">
+    <div class="card"><div class="card-title">👀 Visitas a la página</div>
+      <p style="color:var(--text2);font-size:13px;margin-bottom:14px">Cantidad de veces que se abrió esta página (de tu club).</p>
+      <div style="display:flex;gap:26px;margin-bottom:12px">
+        <div><div style="font-size:26px;font-weight:800;color:var(--accent)" id="visitToday">…</div><div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:1px">Hoy</div></div>
+        <div><div style="font-size:26px;font-weight:800;color:var(--gold)" id="visitTotal">…</div><div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:1px">Total</div></div>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="loadVisitStats()">🔄 Actualizar</button>
+    </div>
     <div class="card"><div class="card-title">⚙️ Cuenta de Administrador</div>
       <p style="color:var(--text2);font-size:13px;line-height:1.6;margin-bottom:14px">Tu acceso usa email y contraseña gestionados de forma segura en el servidor. Para cambiar la contraseña o agregar otro administrador, hacelo desde el panel de Supabase (Authentication → Users).</p>
       <button class="btn btn-danger" onclick="logout()">🚪 Cerrar sesión</button>
@@ -2285,6 +2313,7 @@ async function init(){
   document.getElementById('loadingScreen').style.display='flex';
   document.getElementById('loadingMsg').textContent='Cargando datos del torneo...';
   setSyncDot('syncing');
+  logVisit();
   await refreshAuth();
   let data=await sbGet();
   if(data){
