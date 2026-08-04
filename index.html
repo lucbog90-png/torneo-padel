@@ -1664,7 +1664,10 @@ function reopenZone(zId){
 function zoneHasResults(z){return z.matches.some(m=>m.status==='done')}
 function relinkZone(z){
   z.pairs=z.pairs.map(p=>S.pairs.find(x=>x.id===p.id)||p);
+  const oldSchedules={};
+  (z.matches||[]).forEach(m=>{if(m.schedule)oldSchedules[m.order]=m.schedule});
   const nz=buildZone(z.id,z.pairs);
+  nz.matches.forEach(m=>{if(oldSchedules[m.order])m.schedule=oldSchedules[m.order]});
   z.size=z.pairs.length;z.matches=nz.matches;z.days=nz.days;z.standings=[];z.qualified=[];z.closed=false;
   recalcZone(z);
 }
