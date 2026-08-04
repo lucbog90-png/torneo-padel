@@ -791,7 +791,7 @@ function renderLigaPlayerView(){
   return`<div class="card">
     <div class="card-title">🏅 Ranking — ${esc(cat.name)}</div>
     ${catBtns}
-    ${ranking.length?`<div class="tbl-wrap"><table><thead><tr><th>Pos</th><th>Jugador</th><th>Pts</th><th>Fechas</th><th></th></tr></thead><tbody>${rows}</tbody></table></div><button class="btn btn-secondary btn-sm" style="margin-top:10px" onclick="printLigaRanking(${sel})">🖨️ Descargar ranking (PDF)</button>`:'<p style="color:var(--text2);font-size:13px">Todavía no hay jugadores con puntos en esta categoría.</p>'}
+    ${ranking.length?`<div class="tbl-wrap"><table><thead><tr><th>Pos</th><th>Jugador</th><th>Pts</th><th>Fechas</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`:'<p style="color:var(--text2);font-size:13px">Todavía no hay jugadores con puntos en esta categoría.</p>'}
   </div>`;
 }
 function renderPlayerContent(){
