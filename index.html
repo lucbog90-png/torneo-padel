@@ -302,21 +302,52 @@ tr:last-child td{border-bottom:none}
 <!-- MODALS -->
 <div class="overlay" id="loginModal" style="display:none">
   <div class="modal">
-    <h2>🔐 Supervisor</h2>
-    <p>Ingresá con tu email y contraseña de administrador</p>
-    <div class="ig"><label>Email</label>
-      <input type="email" id="loginEmail" placeholder="admin@club.com" autocomplete="username"
-        oninput="document.getElementById('loginErr').style.display='none'"/>
+    <div id="loginFormSection">
+      <h2>🔐 Supervisor</h2>
+      <p>Ingresá con tu email y contraseña de administrador</p>
+      <div class="ig"><label>Email</label>
+        <input type="email" id="loginEmail" placeholder="admin@club.com" autocomplete="username"
+          oninput="document.getElementById('loginErr').style.display='none'"/>
+      </div>
+      <div class="ig"><label>Contraseña</label>
+        <input type="password" id="loginPass" placeholder="••••••••" autocomplete="current-password"
+          oninput="document.getElementById('loginErr').style.display='none'"
+          onkeydown="if(event.key==='Enter')doLogin()"/>
+      </div>
+      <div id="loginErr" class="modal-err" style="display:none">Email o contraseña incorrectos</div>
+      <p style="text-align:right;margin:-4px 0 10px">
+        <a href="javascript:void(0)" onclick="showRecoverForm()" style="color:var(--accent);font-size:12px;text-decoration:underline">¿Olvidaste tu contraseña?</a>
+      </p>
+      <div class="modal-btns">
+        <button class="btn btn-primary" id="loginBtn" onclick="doLogin()">Entrar</button>
+        <button class="btn btn-secondary" onclick="closeLoginModal()">Cancelar</button>
+      </div>
     </div>
-    <div class="ig"><label>Contraseña</label>
-      <input type="password" id="loginPass" placeholder="••••••••" autocomplete="current-password"
-        oninput="document.getElementById('loginErr').style.display='none'"
-        onkeydown="if(event.key==='Enter')doLogin()"/>
+    <div id="recoverFormSection" style="display:none">
+      <h2>🔑 Recuperar contraseña</h2>
+      <p>Ingresá tu email y te mandamos un link para elegir una contraseña nueva.</p>
+      <div class="ig"><label>Email</label>
+        <input type="email" id="recoverEmail" placeholder="admin@club.com" autocomplete="username" onkeydown="if(event.key==='Enter')sendPasswordReset()"/>
+      </div>
+      <div id="recoverMsg" style="display:none;font-size:12.5px;color:var(--accent);margin-bottom:10px;line-height:1.4"></div>
+      <div class="modal-btns">
+        <button class="btn btn-primary" id="recoverBtn" onclick="sendPasswordReset()">Enviar link</button>
+        <button class="btn btn-secondary" onclick="showLoginForm()">Volver</button>
+      </div>
     </div>
-    <div id="loginErr" class="modal-err" style="display:none">Email o contraseña incorrectos</div>
-    <div class="modal-btns">
-      <button class="btn btn-primary" id="loginBtn" onclick="doLogin()">Entrar</button>
-      <button class="btn btn-secondary" onclick="closeLoginModal()">Cancelar</button>
+    <div id="newPassSection" style="display:none">
+      <h2>🔑 Elegí tu nueva contraseña</h2>
+      <p>Escribila dos veces para confirmar.</p>
+      <div class="ig"><label>Nueva contraseña</label>
+        <input type="password" id="newPass1" placeholder="••••••••" autocomplete="new-password"/>
+      </div>
+      <div class="ig"><label>Repetila</label>
+        <input type="password" id="newPass2" placeholder="••••••••" autocomplete="new-password" onkeydown="if(event.key==='Enter')confirmNewPassword()"/>
+      </div>
+      <div id="newPassErr" class="modal-err" style="display:none"></div>
+      <div class="modal-btns">
+        <button class="btn btn-primary" id="newPassBtn" onclick="confirmNewPassword()">Guardar contraseña</button>
+      </div>
     </div>
   </div>
 </div>
@@ -704,6 +735,49 @@ function closeLoginModal(){
   document.getElementById('loginModal').style.display='none';
   document.getElementById('loginPass').value='';
   document.getElementById('loginErr').style.display='none';
+  showLoginForm();
+}
+function showRecoverForm(){
+  document.getElementById('loginFormSection').style.display='none';
+  document.getElementById('recoverFormSection').style.display='block';
+  document.getElementById('newPassSection').style.display='none';
+  const em=document.getElementById('loginEmail').value.trim();
+  if(em)document.getElementById('recoverEmail').value=em;
+  document.getElementById('recoverMsg').style.display='none';
+  setTimeout(()=>document.getElementById('recoverEmail').focus(),80);
+}
+function showLoginForm(){
+  document.getElementById('loginFormSection').style.display='block';
+  document.getElementById('recoverFormSection').style.display='none';
+  document.getElementById('newPassSection').style.display='none';
+}
+async function sendPasswordReset(){
+  const email=document.getElementById('recoverEmail').value.trim();
+  const btn=document.getElementById('recoverBtn'),msg=document.getElementById('recoverMsg');
+  if(!email){toast('Escribí tu email');return}
+  btn.disabled=true;btn.textContent='Enviando...';
+  try{
+    await sbc.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname+location.search});
+  }catch(e){}
+  btn.disabled=false;btn.textContent='Enviar link';
+  msg.textContent='✓ Si ese email tiene una cuenta, te llegó un correo con el link para elegir una nueva contraseña. Revisá también la carpeta de spam.';
+  msg.style.display='block';
+}
+async function confirmNewPassword(){
+  const p1=document.getElementById('newPass1').value,p2=document.getElementById('newPass2').value;
+  const err=document.getElementById('newPassErr'),btn=document.getElementById('newPassBtn');
+  err.style.display='none';
+  if(!p1||p1.length<6){err.textContent='La contraseña tiene que tener al menos 6 caracteres';err.style.display='block';return}
+  if(p1!==p2){err.textContent='Las contraseñas no coinciden';err.style.display='block';return}
+  btn.disabled=true;btn.textContent='Guardando...';
+  const {error}=await sbc.auth.updateUser({password:p1});
+  btn.disabled=false;btn.textContent='Guardar contraseña';
+  if(error){err.textContent='No se pudo guardar. Probá pedir el link de nuevo.';err.style.display='block';return}
+  toast('✓ Contraseña actualizada, ya podés usarla');
+  closeLoginModal();
+  _isAdmin=true;
+  const d=await sbGet();if(d)applyState(d);
+  enterSup();
 }
 async function doLogin(){
   const email=document.getElementById('loginEmail').value.trim();
@@ -1938,8 +2012,8 @@ function renderConfig(){
       </div>
       <button class="btn btn-secondary btn-sm" onclick="loadVisitStats()">🔄 Actualizar</button>
     </div>
-    <div class="card"><div class="card-title">⚙️ Cuenta de Administrador</div>
-      <p style="color:var(--text2);font-size:13px;line-height:1.6;margin-bottom:14px">Tu acceso usa email y contraseña gestionados de forma segura en el servidor. Para cambiar la contraseña o agregar otro administrador, hacelo desde el panel de Supabase (Authentication → Users).</p>
+    <div class="card"><div class="card-title">⚙️ Mi cuenta</div>
+      <p style="color:var(--text2);font-size:13px;line-height:1.6;margin-bottom:14px">Para cambiar tu contraseña, cerrá sesión y tocá <strong>"¿Olvidaste tu contraseña?"</strong> en la pantalla de acceso.</p>
       <button class="btn btn-danger" onclick="logout()">🚪 Cerrar sesión</button>
     </div>
     <div class="card"><div class="card-title">🎨 Visual</div>
@@ -2325,7 +2399,15 @@ async function init(){
     setSyncDot('err');
   }
   // Si la sesión cambia (logout en otra pestaña, expira, etc.)
-  sbc.auth.onAuthStateChange((_e,session)=>{_isAdmin=!!session});
+  sbc.auth.onAuthStateChange((event,session)=>{
+    _isAdmin=!!session;
+    if(event==='PASSWORD_RECOVERY'){
+      document.getElementById('loginModal').style.display='flex';
+      document.getElementById('loginFormSection').style.display='none';
+      document.getElementById('recoverFormSection').style.display='none';
+      document.getElementById('newPassSection').style.display='block';
+    }
+  });
   setTimeout(()=>{
     document.getElementById('loadingScreen').style.display='none';
     showScreen('welcomeScreen');applyVisuals();
