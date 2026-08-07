@@ -290,6 +290,7 @@ tr:last-child td{border-bottom:none}
     <button class="nav-btn" id="snav-liga" onclick="showSTab('liga')">🏅 Liga</button>
     <button class="nav-btn" id="snav-config" onclick="showSTab('config')">Config.</button>
   </nav>
+  <div id="clubAccessBanner" style="display:none;background:rgba(230,168,23,.14);border-bottom:1px solid var(--warn,#e6a817);color:#e6a817;font-size:12.5px;padding:9px 14px;line-height:1.4"></div>
   <main class="app-main" id="supContent"></main>
   <div class="ad-banner" id="supAdBanner">
     <div id="adContent"><span style="font-size:18px">📢</span><span class="ad-text">ZONA DE PUBLICIDAD</span></div>
@@ -720,13 +721,33 @@ function deleteTournament(i){
 // ═══════════════════════════════════
 // AUTENTICACIÓN (Supabase Auth)
 // ═══════════════════════════════════
+let _userRole=null,_userClubId=null;
+async function checkClubAccess(){
+  try{
+    const {data}=await sbc.auth.getUser();
+    const meta=(data&&data.user&&data.user.user_metadata)||{};
+    _userRole=meta.role||null;
+    _userClubId=meta.club_id||null;
+  }catch(e){_userRole=null;_userClubId=null}
+  renderClubAccessBanner();
+}
+function renderClubAccessBanner(){
+  const el=document.getElementById('clubAccessBanner');
+  if(!el)return;
+  if(_userRole==='admin'||!_userClubId||_userClubId===CLUB_ID){
+    el.style.display='none';el.innerHTML='';
+    return;
+  }
+  el.style.display='block';
+  el.innerHTML=`⚠️ Esta cuenta está asociada al club <strong>"${esc(_userClubId)}"</strong>, pero estás viendo <strong>"${esc(CLUB_ID)}"</strong>. Por ahora podés seguir trabajando (todavía no está bloqueado), pero convendría entrar por el link correcto de tu club.`;
+}
 async function refreshAuth(){
   try{const {data}=await sbc.auth.getSession();_isAdmin=!!(data&&data.session)}catch(e){_isAdmin=false}
   return _isAdmin;
 }
 function openSupFromWelcome(){
   refreshAuth().then(ok=>{
-    if(ok){enterSup();return}
+    if(ok){checkClubAccess();enterSup();return}
     document.getElementById('loginModal').style.display='flex';
     setTimeout(()=>document.getElementById('loginEmail').focus(),80);
   });
@@ -777,6 +798,7 @@ async function confirmNewPassword(){
   closeLoginModal();
   _isAdmin=true;
   const d=await sbGet();if(d)applyState(d);
+  await checkClubAccess();
   enterSup();
 }
 async function doLogin(){
@@ -790,6 +812,7 @@ async function doLogin(){
   if(error){document.getElementById('loginErr').textContent='Email o contraseña incorrectos';document.getElementById('loginErr').style.display='block';return}
   _isAdmin=true;closeLoginModal();
   const d=await sbGet();if(d)applyState(d);
+  await checkClubAccess();
   enterSup();
 }
 async function logout(){
