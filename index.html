@@ -473,7 +473,11 @@ async function sbUpsert(data){
     setSyncDot('syncing');
     const {error}=await sbc.from(TABLE).upsert({key:ROW_KEY,value:JSON.stringify(data)});
     setSyncDot(error?'err':'ok');
-    if(error){console.warn('Error al guardar:',error.message);toast('⚠️ No se pudo guardar (¿sesión vencida?)',3500)}
+    if(error){
+      console.warn('Error al guardar:',error.message);
+      const permErr=/row-level security|permission|policy/i.test(error.message||'');
+      toast(permErr?'⚠️ Esta cuenta no tiene permiso para guardar en este club.':'⚠️ No se pudo guardar (¿sesión vencida?)',4000);
+    }
     return !error;
   }catch(e){setSyncDot('err');return false}
 }
@@ -1149,9 +1153,25 @@ async function startTournament(){
   S.published=false;
   refreshDrop();
   await save();
+  logTournamentStart();
   enableSTab('resultados');enablePTab('resultados');
   if(S.bracketBuilt){enableSTab('bracket');enablePTab('bracket');}
   showSTab('resultados');toast(seeds.length?'¡Zonas armadas con cabezas de serie! Revisalas y publicalas 👁️':'¡Zonas armadas! Revisalas y publicalas cuando estén listas 👁️',4500);
+}
+async function logTournamentStart(){
+  try{
+    const t=(S.tournaments&&S.tournaments[_viewT])||{};
+    const uniquePlayers=new Set();
+    S.pairs.forEach(p=>{if(p.a)uniquePlayers.add(p.a.trim().toLowerCase());if(p.b)uniquePlayers.add(p.b.trim().toLowerCase())});
+    await sbc.from('tournament_log').insert({
+      club_id:CLUB_ID,
+      club_name:S.name||CLUB_ID,
+      tournament_label:t.label||'',
+      category:S.category||'',
+      pairs_count:S.pairs.length,
+      players_count:uniquePlayers.size
+    });
+  }catch(e){/* silencioso: si falla, no interrumpe el sorteo */}
 }
 // Días en común de una zona (intersección de los días de sus parejas).
 function zoneDays(ps){
