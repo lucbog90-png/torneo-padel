@@ -937,11 +937,15 @@ function renderLigaPlayerView(){
 }
 function renderPlayerContent(){
   const c=document.getElementById('playerContent');
+  if(S.currentPTab==='info'){
+    c.innerHTML=renderInfoTab();
+    return;
+  }
   if((S.currentPMode||'torneo')==='liga'){
     c.innerHTML=playerModeSelector()+renderLigaPlayerView();
     return;
   }
-  const m={zonas:renderZonas,resultados:renderResultados,bracket:renderBracketTab,info:renderInfoTab};
+  const m={zonas:renderZonas,resultados:renderResultados,bracket:renderBracketTab};
   c.innerHTML=playerModeSelector()+playerTSelector()+(m[S.currentPTab]||renderZonas)();
 }
 function renderSupContent(){
