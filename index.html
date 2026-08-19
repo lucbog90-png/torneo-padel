@@ -888,8 +888,8 @@ function playerModeSelector(){
   if(!S.liga||!S.liga.categories||!S.liga.categories.length)return '';
   const m=S.currentPMode||'torneo';
   return`<div style="display:flex;gap:8px;margin-bottom:14px">
-    <button onclick="setPlayerMode('torneo')" style="flex:1;padding:10px;border-radius:10px;border:2px solid ${m==='torneo'?'var(--accent)':'var(--border)'};background:${m==='torneo'?'rgba(0,229,160,.12)':'transparent'};color:${m==='torneo'?'var(--accent)':'var(--text2)'};font-weight:800;letter-spacing:1px;cursor:pointer">🎾 TORNEO</button>
-    <button onclick="setPlayerMode('liga')" style="flex:1;padding:10px;border-radius:10px;border:2px solid ${m==='liga'?'var(--gold)':'var(--border)'};background:${m==='liga'?'rgba(255,215,0,.12)':'transparent'};color:${m==='liga'?'var(--gold)':'var(--text2)'};font-weight:800;letter-spacing:1px;cursor:pointer">🏅 LIGA</button>
+    <button onclick="setPlayerMode('torneo')" style="flex:1;padding:10px;border-radius:10px;border:2px solid ${m==='torneo'?'var(--accent)':'var(--border)'};background:${m==='torneo'?'rgba(0,229,160,.12)':'transparent'};color:${m==='torneo'?'var(--accent)':'var(--text2)'};font-weight:800;letter-spacing:1px;cursor:pointer">🎾 TORNEOS</button>
+    <button onclick="setPlayerMode('liga')" style="flex:1;padding:10px;border-radius:10px;border:2px solid ${m==='liga'?'var(--gold)':'var(--border)'};background:${m==='liga'?'rgba(255,215,0,.12)':'transparent'};color:${m==='liga'?'var(--gold)':'var(--text2)'};font-weight:800;letter-spacing:1px;cursor:pointer">🏅 RANKING LIGA</button>
   </div>`;
 }
 function setPlayerMode(mode){
