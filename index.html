@@ -259,6 +259,7 @@ tr:last-child td{border-bottom:none}
     <button class="nav-btn active" id="pnav-zonas" onclick="showPTab('zonas')">Zonas</button>
     <button class="nav-btn" id="pnav-resultados" onclick="showPTab('resultados')" disabled>Resultados</button>
     <button class="nav-btn" id="pnav-bracket" onclick="showPTab('bracket')" disabled>Draws / Llaves</button>
+    <button class="nav-btn" id="pnav-info" onclick="showPTab('info')">ℹ️ Información</button>
   </nav>
   <main class="app-main" id="playerContent"></main>
   <div class="ad-banner" id="playerAdBanner">
@@ -499,7 +500,14 @@ const S={
   logoDataUrl:null,adDataUrl:null,bgDataUrl:null,  // ahora guardan URLs de Storage
   currentPTab:'zonas',currentSTab:'torneo',currentPMode:'torneo',
   liga:{categories:[]},ligaEntry:null,ligaCatId:null,
+  info:{phone:'',email:'',reglamentoUrl:'',reglamentoName:'',locations:[]},
 };
+function migrateInfo(){
+  if(!S.info||typeof S.info!=='object')S.info={phone:'',email:'',reglamentoUrl:'',reglamentoName:'',locations:[]};
+  S.info.phone=S.info.phone||'';S.info.email=S.info.email||'';
+  S.info.reglamentoUrl=S.info.reglamentoUrl||'';S.info.reglamentoName=S.info.reglamentoName||'';
+  if(!Array.isArray(S.info.locations))S.info.locations=[];
+}
 
 // ===== MULTI-TORNEO (base) =====
 let _viewT=0; // torneo cargado en los campos de trabajo (S.pairs, S.zones, ...)
@@ -557,7 +565,7 @@ async function save(){
     logoDataUrl:S.logoDataUrl,adDataUrl:S.adDataUrl,bgDataUrl:S.bgDataUrl,
     tournaments:S.tournaments,activeT:S.activeT,
     category:S.category,description:S.description,pairs:S.pairs,zones:S.zones,bracket:S.bracket,started:S.started,bracketBuilt:S.bracketBuilt,
-    liga:S.liga
+    liga:S.liga,info:S.info
   };
   try{localStorage.setItem('padel_backup_'+ROW_KEY,JSON.stringify(data))}catch(e){}
   await sbUpsert(data);
@@ -568,6 +576,7 @@ function applyState(d){
   S.name=d.name||S.name;S.sponsors=d.sponsors||[];
   S.logoDataUrl=d.logoDataUrl||null;S.adDataUrl=d.adDataUrl||null;S.bgDataUrl=d.bgDataUrl||null;
   S.liga=d.liga||{categories:[]};migrateLiga();
+  S.info=d.info||{phone:'',email:'',reglamentoUrl:'',reglamentoName:'',locations:[]};migrateInfo();
   if(d.tournaments&&d.tournaments.length){
     S.tournaments=d.tournaments;S.activeT=(typeof d.activeT==='number')?d.activeT:0;
   }else{
@@ -885,6 +894,32 @@ function setPlayerMode(mode){
   if(nav)nav.style.display=(mode==='torneo')?'':'none';
   renderPlayerContent();
 }
+function renderInfoTab(){
+  migrateInfo();
+  const info=S.info;
+  const hasContact=!!(info.phone||info.email);
+  const locs=(info.locations||[]).filter(l=>l.mapsUrl);
+  if(!hasContact&&!info.reglamentoUrl&&!locs.length){
+    return`<div class="empty"><div class="ei">ℹ️</div><p>El club todavía no cargó información de contacto, reglamento ni ubicación.</p></div>`;
+  }
+  const contactCard=hasContact?`<div class="card">
+    <div class="card-title">📞 Contacto de la organización</div>
+    ${info.phone?`<p style="margin-bottom:${info.email?'8px':'0'}"><a href="tel:${esc(info.phone.replace(/\s+/g,''))}" style="color:var(--accent);font-weight:600;text-decoration:none">📱 ${esc(info.phone)}</a></p>`:''}
+    ${info.email?`<p style="margin-bottom:0"><a href="mailto:${esc(info.email)}" style="color:var(--accent);font-weight:600;text-decoration:none">✉️ ${esc(info.email)}</a></p>`:''}
+  </div>`:'';
+  const reglamentoCard=info.reglamentoUrl?`<div class="card">
+    <div class="card-title">📄 Reglamento del torneo</div>
+    <a class="btn btn-primary" href="${esc(info.reglamentoUrl)}" target="_blank" rel="noopener">⬇️ Descargar reglamento (PDF)</a>
+  </div>`:'';
+  const locsCard=locs.length?`<div class="card">
+    <div class="card-title">📍 Ubicación${locs.length>1?'es':''}</div>
+    ${locs.map(l=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px">
+      <span style="font-weight:600">${esc(l.name||'Cancha')}</span>
+      <a class="btn btn-secondary btn-sm" href="${esc(l.mapsUrl)}" target="_blank" rel="noopener">🗺️ Ver en Maps</a>
+    </div>`).join('')}
+  </div>`:'';
+  return contactCard+reglamentoCard+locsCard;
+}
 function selectLigaViewCat(i){S._ligaViewCat=i;renderPlayerContent()}
 function renderLigaPlayerView(){
   const cats=(S.liga&&S.liga.categories)||[];
@@ -906,7 +941,7 @@ function renderPlayerContent(){
     c.innerHTML=playerModeSelector()+renderLigaPlayerView();
     return;
   }
-  const m={zonas:renderZonas,resultados:renderResultados,bracket:renderBracketTab};
+  const m={zonas:renderZonas,resultados:renderResultados,bracket:renderBracketTab,info:renderInfoTab};
   c.innerHTML=playerModeSelector()+playerTSelector()+(m[S.currentPTab]||renderZonas)();
 }
 function renderSupContent(){
@@ -930,6 +965,33 @@ async function uploadImage(file,kind){
   return data.publicUrl;
 }
 async function loadLogoFile(inp){const f=inp.files[0];if(!f)return;toast('Subiendo logo...');const url=await uploadImage(f,'logo');if(!url)return;S.logoDataUrl=url;await save();applyVisuals();toast('Logo guardado ✓')}
+async function loadReglamento(inp){
+  const f=inp.files[0];if(!f)return;
+  const isPdf=f.type==='application/pdf'||f.name.toLowerCase().endsWith('.pdf');
+  if(!isPdf){toast('Elegí un archivo PDF');return}
+  toast('Subiendo reglamento...');
+  const url=await uploadImage(f,'reglamento');
+  if(!url)return;
+  migrateInfo();S.info.reglamentoUrl=url;S.info.reglamentoName=f.name;
+  await save();renderSupContent();toast('✓ Reglamento guardado');
+}
+async function clearReglamento(){
+  migrateInfo();S.info.reglamentoUrl='';S.info.reglamentoName='';
+  await save();renderSupContent();toast('Reglamento quitado');
+}
+async function addLocation(){
+  migrateInfo();
+  const nameInp=document.getElementById('newLocName'),urlInp=document.getElementById('newLocUrl');
+  const name=(nameInp?.value||'').trim(),url=(urlInp?.value||'').trim();
+  if(!url){toast('Pegá el link de Google Maps');return}
+  if(!/^https?:\/\//i.test(url)){toast('El link tiene que empezar con http:// o https://');return}
+  S.info.locations.push({name:name||'Cancha',mapsUrl:url});
+  await save();renderSupContent();toast('✓ Ubicación agregada');
+}
+async function removeLocation(i){
+  migrateInfo();S.info.locations.splice(i,1);
+  await save();renderSupContent();toast('Ubicación quitada');
+}
 async function loadAd(inp){const f=inp.files[0];if(!f)return;toast('Subiendo banner...');const url=await uploadImage(f,'ad');if(!url)return;S.adDataUrl=url;await save();applyVisuals();renderSupContent();toast('Banner guardado ✓')}
 async function loadBg(inp){const f=inp.files[0];if(!f)return;toast('Subiendo fondo...');const url=await uploadImage(f,'bg');if(!url)return;S.bgDataUrl=url;document.body.style.setProperty('--court-bg',`url("${encodeURI(url)}")`);await save();toast('Fondo guardado ✓')}
 
@@ -2063,7 +2125,37 @@ async function loadVisitStats(){
 }
 function renderConfig(){
   setTimeout(loadVisitStats,80);
+  migrateInfo();
+  const locRows=(S.info.locations||[]).map((l,i)=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px">
+      <span style="flex:1;font-weight:600;font-size:13px">${esc(l.name||'Cancha')}</span>
+      <a href="${esc(l.mapsUrl)}" target="_blank" rel="noopener" style="font-size:12px;color:var(--text2)">Ver link ↗</a>
+      <button class="btn btn-danger btn-sm" onclick="removeLocation(${i})">✕</button>
+    </div>`).join('');
   return`<div class="grid2">
+    <div class="card"><div class="card-title">ℹ️ Información para jugadores</div>
+      <p style="color:var(--text2);font-size:13px;margin-bottom:14px">Se muestra en la pestaña "Información" que ven los jugadores, para todos tus torneos.</p>
+      <div class="ig" style="margin-bottom:12px"><label>📱 Celular de contacto</label>
+        <input value="${esc(S.info.phone)}" placeholder="Ej: 3562 525011" oninput="S.info.phone=this.value" onblur="save()"/>
+      </div>
+      <div class="ig" style="margin-bottom:14px"><label>✉️ Email de contacto</label>
+        <input type="email" value="${esc(S.info.email)}" placeholder="club@ejemplo.com" oninput="S.info.email=this.value" onblur="save()"/>
+      </div>
+      <div class="ig" style="margin-bottom:14px"><label>📄 Reglamento (PDF)</label>
+        ${S.info.reglamentoUrl?`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:rgba(255,107,53,.05)">
+          <a href="${esc(S.info.reglamentoUrl)}" target="_blank" rel="noopener" style="font-size:13px;color:var(--accent);font-weight:600">📄 ${esc(S.info.reglamentoName||'Ver reglamento')}</a>
+          <button class="btn btn-danger btn-sm" onclick="clearReglamento()">🗑️ Quitar</button>
+        </div>`:`<label class="upload-area"><div style="font-size:26px">📄</div><p>Cargar reglamento (PDF)</p><input type="file" accept="application/pdf,.pdf" style="display:none" onchange="loadReglamento(this)"/></label>`}
+      </div>
+      <div class="ig"><label>📍 Ubicaciones (pegá el link para compartir de Google Maps)</label>
+        ${locRows}
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:8px">
+          <div class="ig" style="flex:1;min-width:140px;margin-bottom:0"><label style="font-size:11px">Nombre del lugar</label><input id="newLocName" placeholder="Ej: Cancha Norte"/></div>
+          <div class="ig" style="flex:2;min-width:200px;margin-bottom:0"><label style="font-size:11px">Link de Google Maps</label><input id="newLocUrl" placeholder="https://maps.app.goo.gl/..."/></div>
+          <button class="btn btn-primary btn-sm" onclick="addLocation()">+ Agregar</button>
+        </div>
+        <p style="font-size:11px;color:var(--text2);margin-top:8px">💡 En Google Maps, buscá el lugar, tocá "Compartir" y copiá el link. Pegalo acá.</p>
+      </div>
+    </div>
     <div class="card"><div class="card-title">👀 Visitas a la página</div>
       <p style="color:var(--text2);font-size:13px;margin-bottom:14px">Cantidad de veces que se abrió esta página (de tu club).</p>
       <div style="display:flex;gap:26px;margin-bottom:12px">
