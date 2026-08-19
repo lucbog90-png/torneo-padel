@@ -1042,6 +1042,16 @@ function ligaDatalist(id){
   if(!names.length)return'';
   return`<datalist id="${id}">${names.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>`;
 }
+function ligaAvailablePlayerNames(){
+  const registered=new Set();
+  S.pairs.forEach(p=>{registered.add(String(p.a).toLowerCase().trim());registered.add(String(p.b).toLowerCase().trim());});
+  return ligaPlayerNames().filter(n=>!registered.has(n.toLowerCase().trim()));
+}
+function ligaAvailableDatalist(id){
+  const names=ligaAvailablePlayerNames();
+  if(!names.length)return'';
+  return`<datalist id="${id}">${names.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>`;
+}
 function renderInscripcion(){
   const rows=S.pairs.map((p,i)=>`<tr>
     <td style="color:var(--text2);font-weight:700">${i+1}</td>
@@ -1934,8 +1944,10 @@ function openEditPair(zId,pairId){
   document.getElementById('zoneEditBody').innerHTML=`
     <h2>✏️ Editar pareja</h2>
     <p>${esc(z.name)}</p>
-    <div class="ig"><label>Jugador 1</label><input id="ed_a" value="${esc(p.a)}"/></div>
-    <div class="ig"><label>Jugador 2</label><input id="ed_b" value="${esc(p.b)}"/></div>
+    <div class="ig"><label>Jugador 1</label><input id="ed_a" list="ligaSubList" value="${esc(p.a)}"/></div>
+    <div class="ig"><label>Jugador 2</label><input id="ed_b" list="ligaSubList" value="${esc(p.b)}"/></div>
+    ${ligaAvailablePlayerNames().length?`<p style="color:var(--text2);font-size:11px;margin-bottom:10px">💡 ¿Se dio de baja un jugador? Empezá a escribir y te va a sugerir jugadores de la Liga que no estén jugando este torneo, para sustituirlo.</p>`:''}
+    ${ligaAvailableDatalist('ligaSubList')}
     <div style="margin-bottom:12px;text-align:left"><span class="day-field-label">Días que pueden jugar (elegí 2)</span><div style="display:flex;gap:8px;flex-wrap:wrap">${chips}</div></div>
     <div class="modal-btns">
       <button class="btn btn-primary" onclick="savePairEdit('${zId}','${pairId}')">Guardar</button>
