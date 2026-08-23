@@ -2332,6 +2332,30 @@ function pubDays(){const set=new Set();S.zones.forEach(z=>z.matches.forEach(m=>{
 function renderPubDayBtns(){const el=document.getElementById('pubDayBtns');if(!el)return;const days=pubDays();let h=`<button class="btn btn-sm ${_pubDay===null?'btn-primary':'btn-secondary'}" onclick="setPubDay(null)">Todas las zonas</button>`;days.forEach(d=>{h+=`<button class="btn btn-sm ${_pubDay===d?'btn-primary':'btn-secondary'}" onclick="setPubDay('${d}')">📅 ${d}</button>`});el.innerHTML=h}
 function setPubDay(d){_pubDay=d;renderPubDayBtns();if(d)generateDayFlyer(d);else generateFlyer()}
 function truncate(s,n){return s.length>n?s.slice(0,n-1)+'…':s}
+function wrapTeamName(ctx,text,maxW){
+  text=text||'';
+  if(!text)return[''];
+  if(ctx.measureText(text).width<=maxW)return[text];
+  const words=text.split(' ');
+  let line1='',i=0;
+  for(;i<words.length;i++){
+    const test=line1?line1+' '+words[i]:words[i];
+    if(line1&&ctx.measureText(test).width>maxW)break;
+    line1=test;
+  }
+  if(i===0){ // ni siquiera la primera palabra entra: la corta igual
+    line1=words[0];
+    while(line1.length>1&&ctx.measureText(line1).width>maxW)line1=line1.slice(0,-1);
+    i=1;
+  }
+  let line2=words.slice(i).join(' ');
+  if(!line2)return[line1];
+  if(ctx.measureText(line2).width>maxW){
+    while(line2.length>1&&ctx.measureText(line2+'…').width>maxW)line2=line2.slice(0,-1);
+    line2+='…';
+  }
+  return[line1,line2];
+}
 function matchSidesCanvas(m){
   if(m.teamA&&m.teamB)return{l:m.teamA.a+' / '+m.teamA.b,r:m.teamB.a+' / '+m.teamB.b,lW:m.status==='done'&&m.winner===m.teamA.id,rW:m.status==='done'&&m.winner===m.teamB.id,pend:false};
   const lab=wf=>(wf.result==='winner'?'Gan. P':'Perd. P')+((wf.matchIdx||0)+1);
@@ -2496,7 +2520,7 @@ function dropSide(team,label){return team?(team.a+' / '+team.b):(label?dropFmtLa
 function generateDropFlyer(){
   const rounds=S.bracket;if(!rounds.length)return;
   const R=rounds.length,m0=rounds[0].matches.length;
-  const colW=360,boxW=300,mBoxH=86,gap0=22,slot0=mBoxH+gap0;
+  const colW=360,boxW=300,mBoxH=150,gap0=22,slot0=mBoxH+gap0;
   const marginX=50,headerTop=210,footerH=130,champW=250;
   const contentH=m0*mBoxH+(m0-1)*gap0;
   const Wc=marginX+R*colW+champW+marginX;
@@ -2519,15 +2543,22 @@ function generateDropFlyer(){
     if(ctx.roundRect){ctx.beginPath();ctx.roundRect(x,top,boxW,mBoxH,9);ctx.fill()}else ctx.fillRect(x,top,boxW,mBoxH);
     ctx.strokeStyle='rgba(79,195,247,.4)';ctx.lineWidth=1.3;
     if(ctx.roundRect){ctx.beginPath();ctx.roundRect(x,top,boxW,mBoxH,9);ctx.stroke()}else ctx.strokeRect(x,top,boxW,mBoxH);
-    ctx.beginPath();ctx.moveTo(x+8,top+39);ctx.lineTo(x+boxW-8,top+39);ctx.strokeStyle='rgba(255,255,255,.1)';ctx.lineWidth=1;ctx.stroke();
     ctx.textAlign='left';
-    ctx.font=`${aW?'bold ':''}20px Rajdhani,Arial`;ctx.fillStyle=aW?'#00e5a0':(bW?'rgba(255,255,255,.45)':'#fff');ctx.fillText(truncate(la,28),x+14,top+27);
-    ctx.font=`${bW?'bold ':''}20px Rajdhani,Arial`;ctx.fillStyle=m.isBye?'#ffd700':(bW?'#00e5a0':(aW?'rgba(255,255,255,.45)':'#fff'));ctx.fillText(truncate(lb,28),x+14,top+52);
+    const textMaxW=boxW-24;
+    ctx.font=`${aW?'bold ':''}20px Rajdhani,Arial`;ctx.fillStyle=aW?'#00e5a0':(bW?'rgba(255,255,255,.45)':'#fff');
+    const linesA=wrapTeamName(ctx,la,textMaxW);
+    ctx.fillText(linesA[0],x+14,top+24);
+    if(linesA[1])ctx.fillText(linesA[1],x+14,top+46);
+    ctx.beginPath();ctx.moveTo(x+8,top+58);ctx.lineTo(x+boxW-8,top+58);ctx.strokeStyle='rgba(255,255,255,.1)';ctx.lineWidth=1;ctx.stroke();
+    ctx.font=`${bW?'bold ':''}20px Rajdhani,Arial`;ctx.fillStyle=m.isBye?'#ffd700':(bW?'#00e5a0':(aW?'rgba(255,255,255,.45)':'#fff'));
+    const linesB=wrapTeamName(ctx,lb,textMaxW);
+    ctx.fillText(linesB[0],x+14,top+80);
+    if(linesB[1])ctx.fillText(linesB[1],x+14,top+102);
     const sc=m.schedule;
     if(sc&&(sc.day||sc.time||sc.court)){
-      ctx.beginPath();ctx.moveTo(x+10,top+61);ctx.lineTo(x+boxW-10,top+61);ctx.strokeStyle='rgba(255,255,255,.12)';ctx.lineWidth=1;ctx.stroke();
+      ctx.beginPath();ctx.moveTo(x+10,top+112);ctx.lineTo(x+boxW-10,top+112);ctx.strokeStyle='rgba(255,255,255,.12)';ctx.lineWidth=1;ctx.stroke();
       const parts=[sc.day,sc.time,sc.court].filter(Boolean).join(' · ');
-      ctx.textAlign='left';ctx.font='bold 16px Rajdhani,Arial';ctx.fillStyle='#ffc24a';ctx.fillText(truncate(parts,40),x+14,top+80);
+      ctx.textAlign='left';ctx.font='bold 16px Rajdhani,Arial';ctx.fillStyle='#ffc24a';ctx.fillText(truncate(parts,40),x+14,top+132);
     }
   };
   const draw=()=>{
@@ -2550,10 +2581,13 @@ function generateDropFlyer(){
     const champ=fin&&fin.winner?(fin.winner===fin.teamA?.id?fin.teamA:fin.teamB):null;
     const cxC=xCol(R-1)+boxW+30,cyC=centers[R-1][0],cwC=champW-50;
     ctx.beginPath();ctx.moveTo(xCol(R-1)+boxW,cyC);ctx.lineTo(cxC,cyC);ctx.strokeStyle='#ffd700';ctx.lineWidth=2;ctx.stroke();
-    ctx.fillStyle='rgba(255,215,0,.12)';if(ctx.roundRect){ctx.beginPath();ctx.roundRect(cxC,cyC-40,cwC,80,10);ctx.fill()}else ctx.fillRect(cxC,cyC-40,cwC,80);
-    ctx.strokeStyle='#ffd700';ctx.lineWidth=2;if(ctx.roundRect){ctx.beginPath();ctx.roundRect(cxC,cyC-40,cwC,80,10);ctx.stroke()}else ctx.strokeRect(cxC,cyC-40,cwC,80);
-    ctx.textAlign='center';ctx.font=`bold 20px 'Bebas Neue',Impact,sans-serif`;ctx.fillStyle='#ffd700';ctx.fillText('🏆 CAMPEÓN',cxC+cwC/2,cyC-8);
-    ctx.font='bold 20px Rajdhani,Arial';ctx.fillStyle='#fff';ctx.fillText(champ?truncate(champ.a+' / '+champ.b,24):'A definir',cxC+cwC/2,cyC+20);
+    ctx.fillStyle='rgba(255,215,0,.12)';if(ctx.roundRect){ctx.beginPath();ctx.roundRect(cxC,cyC-52,cwC,104,10);ctx.fill()}else ctx.fillRect(cxC,cyC-52,cwC,104);
+    ctx.strokeStyle='#ffd700';ctx.lineWidth=2;if(ctx.roundRect){ctx.beginPath();ctx.roundRect(cxC,cyC-52,cwC,104,10);ctx.stroke()}else ctx.strokeRect(cxC,cyC-52,cwC,104);
+    ctx.textAlign='center';ctx.font=`bold 20px 'Bebas Neue',Impact,sans-serif`;ctx.fillStyle='#ffd700';ctx.fillText('🏆 CAMPEÓN',cxC+cwC/2,cyC-24);
+    ctx.font='bold 20px Rajdhani,Arial';ctx.fillStyle='#fff';
+    const champLines=champ?wrapTeamName(ctx,champ.a+' / '+champ.b,cwC-30):['A definir'];
+    ctx.fillText(champLines[0],cxC+cwC/2,cyC+4);
+    if(champLines[1])ctx.fillText(champLines[1],cxC+cwC/2,cyC+27);
     drawAdsStrip(ctx,Wc,Hc-118,110,finalizeDrop);
   };
   if(S.bgDataUrl){const img=new Image();img.crossOrigin='anonymous';img.onload=()=>{ctx.drawImage(img,0,0,Wc,Hc);draw()};img.onerror=()=>{plain();draw()};img.src=S.bgDataUrl}
