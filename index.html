@@ -2454,14 +2454,13 @@ function drawAdsStrip(ctx,W,bandTop,bandH,done){
   });
 }
 function flyerAd(ctx,W,H,done){drawAdsStrip(ctx,W,H-122,116,done)}
-function flyerHeaderEndY(){return S.category?344:300}
+function flyerHeaderEndY(){return S.category?314:270}
 function flyerHeader(ctx,W,subtitle,then){
   const drawTitles=()=>{
     ctx.textAlign='center';
     ctx.font=`bold 68px 'Bebas Neue',Impact,sans-serif`;ctx.fillStyle='#00e5a0';ctx.fillText(S.name.toUpperCase(),W/2,150);
     let y=190;
     if(S.category){ctx.font='36px Rajdhani,Arial';ctx.fillStyle='#ff6b35';ctx.fillText(S.category.toUpperCase(),W/2,y+10);y+=44}
-    ctx.font='28px Rajdhani,Arial';ctx.fillStyle='rgba(255,255,255,.5)';const dt=new Date().toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'long'});ctx.fillText(dt.toUpperCase(),W/2,y);y+=30;
     ctx.strokeStyle='#00e5a0';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(60,y);ctx.lineTo(W-60,y);ctx.stroke();y+=44;
     ctx.font='bold 42px Rajdhani,Arial';ctx.fillStyle='#4fc3f7';ctx.fillText(subtitle,W/2,y);y+=36;
     then(y);
