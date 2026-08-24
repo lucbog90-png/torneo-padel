@@ -526,8 +526,8 @@ function migrateT(){
 }
 // ===== LIGA (ranking por puntos, compartido por club) =====
 const LIGA_POINTS={campeon:100,finalista:80,semifinalista:60,cuartos:40,octavos:30,dieciseisavos:20,zona:10};
-const LIGA_LABELS={campeon:'🏆 Campeón',finalista:'🥈 Finalista',semifinalista:'🥉 Semifinalista',cuartos:'Cuartos de final',octavos:'Octavos de final',dieciseisavos:'16avos de final',zona:'Quedó en zona'};
-const LIGA_LABELS_PDF={campeon:'Campeón',finalista:'Finalista',semifinalista:'Semifinalista',cuartos:'Cuartos de final',octavos:'Octavos de final',dieciseisavos:'16avos de final',zona:'Quedó en zona'};
+const LIGA_LABELS={campeon:'🏆 Campeón',finalista:'🥈 Finalista',semifinalista:'🥉 Semifinalista',cuartos:'Cuartos de final',octavos:'Octavos de final',dieciseisavos:'16avos de final',zona:'Zona'};
+const LIGA_LABELS_PDF={campeon:'Campeón',finalista:'Finalista',semifinalista:'Semifinalista',cuartos:'Cuartos de final',octavos:'Octavos de final',dieciseisavos:'16avos de final',zona:'Zona'};
 function migrateLiga(){
   if(!S.liga||typeof S.liga!=='object')S.liga={categories:[]};
   if(!Array.isArray(S.liga.categories))S.liga.categories=[];
