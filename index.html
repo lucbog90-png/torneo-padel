@@ -418,6 +418,8 @@ tr:last-child td{border-bottom:none}
 
 <!-- Supabase JS SDK (necesario para login y subida de imágenes) -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- jsPDF (necesario para descargar PDFs reales, sin pasar por el diálogo de impresión) -->
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script>
 // ═══════════════════════════════════════════════════════════════
 //  CONFIGURACIÓN  ·  EDITAR ESTOS 3 VALORES POR CADA INSTALACIÓN
@@ -525,6 +527,7 @@ function migrateT(){
 // ===== LIGA (ranking por puntos, compartido por club) =====
 const LIGA_POINTS={campeon:100,finalista:80,semifinalista:60,cuartos:40,octavos:30,dieciseisavos:20,zona:10};
 const LIGA_LABELS={campeon:'🏆 Campeón',finalista:'🥈 Finalista',semifinalista:'🥉 Semifinalista',cuartos:'Cuartos de final',octavos:'Octavos de final',dieciseisavos:'16avos de final',zona:'Quedó en zona'};
+const LIGA_LABELS_PDF={campeon:'Campeón',finalista:'Finalista',semifinalista:'Semifinalista',cuartos:'Cuartos de final',octavos:'Octavos de final',dieciseisavos:'16avos de final',zona:'Quedó en zona'};
 function migrateLiga(){
   if(!S.liga||typeof S.liga!=='object')S.liga={categories:[]};
   if(!Array.isArray(S.liga.categories))S.liga.categories=[];
@@ -1782,13 +1785,13 @@ function closeLigaModal(){document.getElementById('ligaModal').style.display='no
 function viewLigaFecha(catIdx,historyId){
   const cat=S.liga.categories[catIdx];if(!cat)return;
   const h=cat.history.find(x=>x.id===historyId);if(!h)return;
-  const rows=h.entries.map(e=>`<tr><td>${esc(e.playerName)}</td><td>${LIGA_LABELS[e.instancia]||e.instancia}</td><td style="color:var(--gold);font-weight:700">+${e.points}</td></tr>`).join('');
+  const rows=[...h.entries].sort((a,b)=>b.points-a.points).map(e=>`<tr><td>${esc(e.playerName)}</td><td>${LIGA_LABELS[e.instancia]||e.instancia}</td><td style="color:var(--gold);font-weight:700">+${e.points}</td></tr>`).join('');
   document.getElementById('ligaModalBody').innerHTML=`
     <h2 style="margin-bottom:2px">📅 ${esc(h.label)}</h2>
     <p style="color:var(--text2);font-size:12px;margin-bottom:14px">${esc(cat.name)} · ${h.date} · ${h.entries.length} jugadores</p>
     <div class="tbl-wrap" style="max-height:320px;overflow-y:auto"><table><thead><tr><th>Jugador</th><th>Instancia</th><th>Pts</th></tr></thead><tbody>${rows}</tbody></table></div>
     <div class="modal-btns">
-      <button class="btn btn-gold" onclick="printLigaFecha(${catIdx},'${historyId}')">🖨️ Descargar / Imprimir PDF</button>
+      <button class="btn btn-gold" onclick="printLigaFecha(${catIdx},'${historyId}')">⬇️ Descargar PDF</button>
       <button class="btn btn-secondary" onclick="closeLigaModal()">Cerrar</button>
     </div>`;
   document.getElementById('ligaModal').style.display='flex';
@@ -1818,21 +1821,67 @@ function printDocShell(title,subtitle,theadHtml,rowsHtml){
   <div class="foot">LTJ Digital — Sistema de Torneos y Liga</div>
   </body></html>`;
 }
+function pdfFileName(s){return String(s||'archivo').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/gi,'_').replace(/^_+|_+$/g,'')}
+function downloadPdfTable(title,subtitle,cols,rows,filename){
+  if(!(window.jspdf&&window.jspdf.jsPDF)){toast('⚠️ No se pudo generar el PDF (no cargó la librería). Revisá tu conexión y probá de nuevo.',4500);return}
+  const{jsPDF}=window.jspdf;
+  const doc=new jsPDF({unit:'mm',format:'a4'});
+  const pw=doc.internal.pageSize.getWidth(),ph=doc.internal.pageSize.getHeight();
+  const marginX=16,usableW=pw-marginX*2,rowH=8;
+  let y=22;
+  doc.setFont('helvetica','bold');doc.setFontSize(17);doc.setTextColor(11,61,46);doc.text(title,marginX,y);y+=7;
+  doc.setFont('helvetica','normal');doc.setFontSize(10.5);doc.setTextColor(90,107,120);doc.text(subtitle,marginX,y);y+=9;
+  const colX=[];let acc=marginX;cols.forEach(c=>{colX.push(acc);acc+=usableW*c.width});
+  const drawHeader=()=>{
+    doc.setFillColor(11,61,46);doc.rect(marginX,y-5.5,usableW,rowH,'F');
+    doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(255,255,255);
+    cols.forEach((c,i)=>{
+      if(c.align==='right')doc.text(c.label,colX[i]+usableW*c.width-2,y,{align:'right'});
+      else doc.text(c.label,colX[i]+2,y);
+    });
+    y+=rowH;
+  };
+  drawHeader();
+  doc.setFont('helvetica','normal');doc.setFontSize(10);
+  rows.forEach((r,ri)=>{
+    if(y>ph-18){doc.addPage();y=20;drawHeader();doc.setFont('helvetica','normal');doc.setFontSize(10)}
+    if(ri%2===0){doc.setFillColor(244,249,246);doc.rect(marginX,y-5.5,usableW,rowH,'F')}
+    doc.setTextColor(18,24,31);
+    cols.forEach((c,i)=>{
+      const val=String(r[i]??'');
+      if(c.align==='right')doc.text(val,colX[i]+usableW*c.width-2,y,{align:'right'});
+      else doc.text(val,colX[i]+2,y);
+    });
+    y+=rowH;
+  });
+  doc.setFont('helvetica','normal');doc.setFontSize(8.5);doc.setTextColor(147,165,171);
+  doc.text('LTJ Digital — Sistema de Torneos y Liga',marginX,ph-10);
+  doc.save(filename);
+}
 function printLigaFecha(catIdx,historyId){
   const cat=S.liga.categories[catIdx];if(!cat)return;
   const h=cat.history.find(x=>x.id===historyId);if(!h)return;
-  const rows=h.entries.map(e=>`<tr><td>${esc(e.playerName)}</td><td>${LIGA_LABELS[e.instancia]||e.instancia}</td><td>+${e.points}</td></tr>`).join('');
-  const html=printDocShell(`${cat.name} — ${h.label}`,`Fecha: ${h.date} · ${h.entries.length} jugadores`,'<tr><th>Jugador</th><th>Instancia</th><th>Puntos</th></tr>',rows);
-  openPrintWindow(html);
+  const sorted=[...h.entries].sort((a,b)=>b.points-a.points);
+  const rows=sorted.map(e=>[e.playerName,LIGA_LABELS_PDF[e.instancia]||e.instancia,'+'+e.points]);
+  const cols=[{label:'Jugador',width:.5,align:'left'},{label:'Instancia',width:.3,align:'left'},{label:'Puntos',width:.2,align:'right'}];
+  downloadPdfTable(`${cat.name} — ${h.label}`,`Fecha: ${h.date} · ${h.entries.length} jugadores`,cols,rows,`${pdfFileName(cat.name)}_${pdfFileName(h.label)}.pdf`);
 }
 function printLigaRanking(catIdx){
   const cat=S.liga.categories[catIdx];if(!cat)return;
   const ranking=[...cat.players].sort((a,b)=>b.points-a.points||b.fechas-a.fechas);
-  const rows=ranking.map((p,i)=>`<tr><td>${i+1}°</td><td>${esc(p.name)}</td><td>${p.points}</td><td>${p.fechas}</td></tr>`).join('');
-  const html=printDocShell(`Ranking — ${cat.name}`,`Al ${new Date().toLocaleDateString('es-AR')} · ${ranking.length} jugadores`,'<tr><th>Pos</th><th>Jugador</th><th>Puntos</th><th>Fechas</th></tr>',rows);
-  openPrintWindow(html);
+  const rows=ranking.map((p,i)=>[`${i+1}°`,p.name,String(p.points),String(p.fechas)]);
+  const cols=[{label:'Pos',width:.12,align:'left'},{label:'Jugador',width:.48,align:'left'},{label:'Puntos',width:.2,align:'right'},{label:'Fechas',width:.2,align:'right'}];
+  downloadPdfTable(`Ranking — ${cat.name}`,`Al ${new Date().toLocaleDateString('es-AR')} · ${ranking.length} jugadores`,cols,rows,`Ranking_${pdfFileName(cat.name)}.pdf`);
 }
 function pctStr(w,total){return total>0?(w/total*100).toFixed(2)+'%':'—'}
+function playerFechaHistory(cat,playerId){
+  const rows=[];
+  cat.history.forEach(h=>{
+    const e=h.entries.find(x=>x.playerId===playerId);
+    if(e)rows.push({label:h.label,date:h.date,instancia:e.instancia,points:e.points});
+  });
+  return rows.reverse();
+}
 function openPlayerStats(catIdx,playerId){
   const cat=S.liga.categories[catIdx];if(!cat)return;
   const p=cat.players.find(x=>x.id===playerId);if(!p)return;
@@ -1844,12 +1893,23 @@ function openPlayerStats(catIdx,playerId){
       <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:4px"><span style="color:var(--text2)">Perdidos</span><strong style="color:var(--danger)">${l}</strong></div>
       <div style="display:flex;justify-content:space-between;font-size:12.5px"><span style="color:var(--text2)">Efectividad</span><strong>${pctStr(g,j)}</strong></div>
     </div>`;
+  const fechaRows=playerFechaHistory(cat,p.id);
+  const fechaBlock=`
+    <div style="background:#4fc3f722;border:1px solid #4fc3f755;border-radius:10px;padding:10px 14px;margin-bottom:10px">
+      <div style="font-weight:800;color:#4fc3f7;font-size:12px;letter-spacing:1px;margin-bottom:8px">PUNTOS POR FECHA</div>
+      ${fechaRows.length?fechaRows.map(r=>`
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;padding:5px 0;border-bottom:1px solid var(--border)">
+          <span style="color:var(--text2)">${esc(r.label)} <span style="opacity:.65">· ${LIGA_LABELS[r.instancia]||r.instancia}</span></span>
+          <strong style="color:var(--gold)">+${r.points}</strong>
+        </div>`).join(''):'<p style="color:var(--text2);font-size:12px;margin:0">Todavía no tiene fechas cargadas.</p>'}
+    </div>`;
   document.getElementById('ligaModalBody').innerHTML=`
     <h2 style="margin-bottom:2px">📊 ${esc(p.name)}</h2>
     <p style="color:var(--text2);font-size:12px;margin-bottom:14px">${esc(cat.name)} · ${p.points} pts totales · ${p.fechas} fechas jugadas</p>
     ${block('PARTIDOS','#00e5a0',p.pj||0,p.pg||0,p.pp||0)}
     ${block('SETS','#ffd76a',p.sj||0,p.sg||0,p.sp||0)}
     ${block('GAMES','#7CF7C4',p.gj||0,p.gg||0,p.gp||0)}
+    ${fechaBlock}
     <div class="modal-btns"><button class="btn btn-secondary" onclick="closeLigaModal()">Cerrar</button></div>`;
   document.getElementById('ligaModal').style.display='flex';
 }
@@ -2267,7 +2327,7 @@ function renderSupLiga(){
       <input id="ligaPlayerName" placeholder="Nombre y apellido del jugador" style="flex:1;min-width:180px" onkeydown="if(event.key==='Enter')addLigaPlayer(${sel})"/>
       <button class="btn btn-primary btn-sm" onclick="addLigaPlayer(${sel})">+ Agregar jugador</button>
     </div>
-    ${cat.players.length?`<div class="tbl-wrap"><table><thead><tr><th>Pos</th><th>Jugador</th><th>Pts</th><th>Fechas</th><th></th></tr></thead><tbody>${playerRows}</tbody></table></div><button class="btn btn-secondary btn-sm" style="margin-top:10px" onclick="printLigaRanking(${sel})">🖨️ Descargar ranking (PDF)</button>`:'<p style="color:var(--text2);font-size:13px">Todavía no cargaste jugadores en esta categoría.</p>'}
+    ${cat.players.length?`<div class="tbl-wrap"><table><thead><tr><th>Pos</th><th>Jugador</th><th>Pts</th><th>Fechas</th><th></th></tr></thead><tbody>${playerRows}</tbody></table></div><button class="btn btn-secondary btn-sm" style="margin-top:10px" onclick="printLigaRanking(${sel})">⬇️ Descargar ranking (PDF)</button>`:'<p style="color:var(--text2);font-size:13px">Todavía no cargaste jugadores en esta categoría.</p>'}
   </div>
   ${histRows?`<div class="card"><div class="card-title">📅 Fechas cargadas <span style="font-weight:400;color:var(--text2);font-size:11px">(tocá una para ver el detalle)</span></div>${histRows}</div>`:''}`;
   return html;
