@@ -516,6 +516,7 @@ function migrateInfo(){
   S.info.contacts.forEach(c=>{c.name=c.name||'';c.phone=c.phone||'';c.email=c.email||''});
   S.info.reglamentoUrl=S.info.reglamentoUrl||'';S.info.reglamentoName=S.info.reglamentoName||'';
   if(!Array.isArray(S.info.locations))S.info.locations=[];
+  S.info.instagramUrl=S.info.instagramUrl||'';S.info.whatsappGroupUrl=S.info.whatsappGroupUrl||'';
 }
 
 // ===== MULTI-TORNEO (base) =====
@@ -910,7 +911,8 @@ function renderInfoTab(){
   const info=S.info;
   const contacts=(info.contacts||[]).filter(c=>c.phone||c.email);
   const locs=(info.locations||[]).filter(l=>l.mapsUrl);
-  if(!contacts.length&&!info.reglamentoUrl&&!locs.length){
+  const hasSocial=!!(info.instagramUrl||info.whatsappGroupUrl);
+  if(!contacts.length&&!info.reglamentoUrl&&!locs.length&&!hasSocial){
     return`<div class="empty"><div class="ei">ℹ️</div><p>El club todavía no cargó información de contacto, reglamento ni ubicación.</p></div>`;
   }
   const contactCard=contacts.length?`<div class="card">
@@ -927,6 +929,13 @@ function renderInfoTab(){
       </div>`;
     }).join('')}
   </div>`:'';
+  const seguinosCard=hasSocial?`<div class="card">
+    <div class="card-title">📲 Seguinos</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      ${info.instagramUrl?`<a class="btn btn-secondary" href="${esc(info.instagramUrl)}" target="_blank" rel="noopener">📸 Instagram</a>`:''}
+      ${info.whatsappGroupUrl?`<a class="btn btn-primary" href="${esc(info.whatsappGroupUrl)}" target="_blank" rel="noopener">💬 Grupo de WhatsApp</a>`:''}
+    </div>
+  </div>`:'';
   const reglamentoCard=info.reglamentoUrl?`<div class="card">
     <div class="card-title">📄 Reglamento del torneo</div>
     <a class="btn btn-primary" href="${esc(info.reglamentoUrl)}" target="_blank" rel="noopener">⬇️ Descargar reglamento (PDF)</a>
@@ -938,7 +947,7 @@ function renderInfoTab(){
       <a class="btn btn-secondary btn-sm" href="${esc(l.mapsUrl)}" target="_blank" rel="noopener">🗺️ Ver en Maps</a>
     </div>`).join('')}
   </div>`:'';
-  return contactCard+reglamentoCard+locsCard;
+  return contactCard+seguinosCard+reglamentoCard+locsCard;
 }
 function selectLigaViewCat(i){S._ligaViewCat=i;renderPlayerContent()}
 function renderLigaPlayerView(){
@@ -1082,6 +1091,15 @@ async function addContact(){
 async function removeContact(i){
   migrateInfo();S.info.contacts.splice(i,1);
   await save();renderSupContent();toast('Contacto quitado');
+}
+async function saveSocial(){
+  migrateInfo();
+  const igInp=document.getElementById('socInstagram'),waInp=document.getElementById('socWhatsapp');
+  const ig=(igInp?.value||'').trim(),wa=(waInp?.value||'').trim();
+  if(ig&&!/^https?:\/\//i.test(ig)){toast('El link de Instagram tiene que empezar con http:// o https://');return}
+  if(wa&&!/^https?:\/\//i.test(wa)){toast('El link del grupo de WhatsApp tiene que empezar con http:// o https://');return}
+  S.info.instagramUrl=ig;S.info.whatsappGroupUrl=wa;
+  await save();renderSupContent();toast('✓ Guardado');
 }
 async function addLocation(){
   migrateInfo();
@@ -2309,6 +2327,14 @@ function renderConfig(){
           <button class="btn btn-primary btn-sm" onclick="addContact()">+ Agregar</button>
         </div>
         <p style="font-size:11px;color:var(--text2);margin-top:8px">💡 El celular necesita código de país y de área, sin espacios ni "+" (Ej: 549 3562525011 para Argentina), para que funcione el botón de WhatsApp.</p>
+      </div>
+      <div class="ig" style="margin-bottom:14px"><label>📲 Seguinos (Instagram / grupo de WhatsApp)</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+          <div class="ig" style="flex:1;min-width:180px;margin-bottom:0"><label style="font-size:11px">Link de Instagram</label><input id="socInstagram" placeholder="https://instagram.com/tuclub" value="${esc(S.info.instagramUrl||'')}"/></div>
+          <div class="ig" style="flex:1;min-width:180px;margin-bottom:0"><label style="font-size:11px">Link del grupo de WhatsApp</label><input id="socWhatsapp" placeholder="https://chat.whatsapp.com/..." value="${esc(S.info.whatsappGroupUrl||'')}"/></div>
+          <button class="btn btn-primary btn-sm" onclick="saveSocial()">💾 Guardar</button>
+        </div>
+        <p style="font-size:11px;color:var(--text2);margin-top:8px">💡 En WhatsApp: entrá al grupo → tocá el nombre del grupo → "Invitar a través de enlace" y copiá ese link acá.</p>
       </div>
       <div class="ig" style="margin-bottom:14px"><label>📄 Reglamento (PDF)</label>
         ${S.info.reglamentoUrl?`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:rgba(255,107,53,.05)">
