@@ -259,6 +259,7 @@ tr:last-child td{border-bottom:none}
     <button class="nav-btn active" id="pnav-zonas" onclick="showPTab('zonas')">Zonas</button>
     <button class="nav-btn" id="pnav-resultados" onclick="showPTab('resultados')" disabled>Resultados</button>
     <button class="nav-btn" id="pnav-bracket" onclick="showPTab('bracket')" disabled>Draws / Llaves</button>
+    <button class="nav-btn" id="pnav-novedades" onclick="showPTab('novedades')">📰 Novedades</button>
     <button class="nav-btn" id="pnav-info" onclick="showPTab('info')">ℹ️ Información</button>
   </nav>
   <main class="app-main" id="playerContent"></main>
@@ -289,6 +290,7 @@ tr:last-child td{border-bottom:none}
     <button class="nav-btn" id="snav-resultados" onclick="showSTab('resultados')" disabled>Resultados</button>
     <button class="nav-btn" id="snav-bracket" onclick="showSTab('bracket')" disabled>Draws</button>
     <button class="nav-btn" id="snav-liga" onclick="showSTab('liga')">🏅 Liga</button>
+    <button class="nav-btn" id="snav-novedades" onclick="showSTab('novedades')">📰 Novedades</button>
     <button class="nav-btn" id="snav-config" onclick="showSTab('config')">Config.</button>
   </nav>
   <main class="app-main" id="supContent"></main>
@@ -503,6 +505,7 @@ const S={
   currentPTab:'zonas',currentSTab:'torneo',currentPMode:'torneo',
   liga:{categories:[]},ligaEntry:null,ligaCatId:null,
   info:{contacts:[],reglamentoUrl:'',reglamentoName:'',locations:[]},
+  novedades:[],
 };
 function migrateInfo(){
   if(!S.info||typeof S.info!=='object')S.info={contacts:[],reglamentoUrl:'',reglamentoName:'',locations:[]};
@@ -572,7 +575,7 @@ async function save(){
     logoDataUrl:S.logoDataUrl,adDataUrl:S.adDataUrl,bgDataUrl:S.bgDataUrl,
     tournaments:S.tournaments,activeT:S.activeT,
     category:S.category,description:S.description,pairs:S.pairs,zones:S.zones,bracket:S.bracket,started:S.started,bracketBuilt:S.bracketBuilt,
-    liga:S.liga,info:S.info
+    liga:S.liga,info:S.info,novedades:S.novedades
   };
   try{localStorage.setItem('padel_backup_'+ROW_KEY,JSON.stringify(data))}catch(e){}
   await sbUpsert(data);
@@ -584,6 +587,7 @@ function applyState(d){
   S.logoDataUrl=d.logoDataUrl||null;S.adDataUrl=d.adDataUrl||null;S.bgDataUrl=d.bgDataUrl||null;
   S.liga=d.liga||{categories:[]};migrateLiga();
   S.info=d.info||{contacts:[],reglamentoUrl:'',reglamentoName:'',locations:[]};migrateInfo();
+  S.novedades=Array.isArray(d.novedades)?d.novedades:[];
   if(d.tournaments&&d.tournaments.length){
     S.tournaments=d.tournaments;S.activeT=(typeof d.activeT==='number')?d.activeT:0;
   }else{
@@ -957,6 +961,10 @@ function renderPlayerContent(){
     c.innerHTML=renderInfoTab();
     return;
   }
+  if(S.currentPTab==='novedades'){
+    c.innerHTML=renderNovedadesTab();
+    return;
+  }
   if((S.currentPMode||'torneo')==='liga'){
     c.innerHTML=playerModeSelector()+renderLigaPlayerView();
     return;
@@ -966,8 +974,72 @@ function renderPlayerContent(){
 }
 function renderSupContent(){
   const c=document.getElementById('supContent');
-  const m={torneo:renderSupTorneo,inscripcion:renderInscripcion,resultados:renderSupResultados,bracket:renderBracketTabSup,liga:renderSupLiga,config:renderConfig};
+  const m={torneo:renderSupTorneo,inscripcion:renderInscripcion,resultados:renderSupResultados,bracket:renderBracketTabSup,liga:renderSupLiga,novedades:renderSupNovedades,config:renderConfig};
   c.innerHTML=(m[S.currentSTab]||renderSupTorneo)();
+}
+// ═══════════════════════════════════
+// NOVEDADES (ascensos / fechas programadas, en imagen)
+// ═══════════════════════════════════
+function fmtNovedadFecha(iso){
+  if(!iso)return'';
+  try{return new Date(iso+'T00:00:00').toLocaleDateString('es-AR',{day:'numeric',month:'long',year:'numeric'})}catch(e){return''}
+}
+function novedadBadge(tipo){
+  return tipo==='ascenso'
+    ?`<span class="badge" style="background:rgba(0,229,160,.15);color:var(--accent);border:1px solid rgba(0,229,160,.4)">⬆️ ASCENSO</span>`
+    :`<span class="badge" style="background:rgba(79,195,247,.15);color:var(--accent3);border:1px solid rgba(79,195,247,.4)">📅 FECHA PROGRAMADA</span>`;
+}
+function renderNovedadesTab(){
+  const items=[...(S.novedades||[])].sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
+  if(!items.length)return`<div class="empty"><div class="ei">📰</div><p>Todavía no hay novedades cargadas por el club.</p></div>`;
+  return items.map(n=>`<div class="card" style="padding:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      ${novedadBadge(n.tipo)}
+      ${n.fecha?`<span style="font-size:12px;color:var(--text2)">${esc(fmtNovedadFecha(n.fecha))}</span>`:''}
+    </div>
+    ${n.titulo?`<div style="font-weight:700;margin-bottom:10px">${esc(n.titulo)}</div>`:''}
+    <img src="${esc(n.imageUrl)}" style="width:100%;border-radius:10px;display:block" loading="lazy"/>
+  </div>`).join('');
+}
+function renderSupNovedades(){
+  const items=[...(S.novedades||[])].sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
+  const form=`<div class="card">
+    <div class="card-title">📰 Nueva novedad</div>
+    <p style="color:var(--text2);font-size:13px;margin-bottom:14px">Se muestra en la pestaña "Novedades" que ven los jugadores. Podés subir una nueva cada vez que haya un ascenso o se programe una fecha.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">
+      <div class="ig" style="flex:1;min-width:150px"><label>Tipo</label>
+        <select id="novTipo"><option value="ascenso">⬆️ Ascenso</option><option value="fecha">📅 Fecha programada</option></select>
+      </div>
+      <div class="ig" style="flex:1;min-width:150px"><label>Fecha (opcional)</label><input id="novFecha" type="date"/></div>
+    </div>
+    <div class="ig" style="margin-bottom:12px"><label>Título (opcional)</label><input id="novTitulo" placeholder="Ej: Ascenso Categoría B — Agosto"/></div>
+    <label class="upload-area"><div style="font-size:26px">📷</div><p>Cargar imagen</p><input type="file" accept="image/*" style="display:none" onchange="addNovedad(this)"/></label>
+  </div>`;
+  const list=items.length?items.map(n=>`<div class="card" style="padding:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      ${novedadBadge(n.tipo)}
+      ${n.fecha?`<span style="font-size:12px;color:var(--text2)">${esc(fmtNovedadFecha(n.fecha))}</span>`:''}
+    </div>
+    ${n.titulo?`<div style="font-weight:700;margin-bottom:10px">${esc(n.titulo)}</div>`:''}
+    <img src="${esc(n.imageUrl)}" style="width:100%;border-radius:10px;display:block;margin-bottom:10px"/>
+    <button class="btn btn-danger btn-sm" onclick="removeNovedad('${n.id}')">🗑️ Eliminar</button>
+  </div>`).join(''):`<div class="empty"><div class="ei">📰</div><p>Todavía no cargaste ninguna novedad.</p></div>`;
+  return form+list;
+}
+async function addNovedad(inp){
+  const f=inp.files[0];if(!f)return;
+  const tipoEl=document.getElementById('novTipo'),tituloEl=document.getElementById('novTitulo'),fechaEl=document.getElementById('novFecha');
+  const tipo=(tipoEl?.value)||'ascenso',titulo=(tituloEl?.value||'').trim(),fecha=(fechaEl?.value||'');
+  toast('Subiendo imagen...');
+  const url=await uploadImage(f,'novedad');
+  if(!url)return;
+  S.novedades=S.novedades||[];
+  S.novedades.push({id:uid(),tipo,titulo,fecha,imageUrl:url,createdAt:new Date().toISOString()});
+  await save();renderSupContent();toast('✓ Novedad publicada');
+}
+async function removeNovedad(id){
+  S.novedades=(S.novedades||[]).filter(n=>n.id!==id);
+  await save();renderSupContent();toast('Novedad eliminada');
 }
 
 // ═══════════════════════════════════
