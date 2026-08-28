@@ -1004,7 +1004,7 @@ function fmtNovedadFecha(iso){
 }
 function novedadBadge(tipo){
   return tipo==='ascenso'
-    ?`<span class="badge" style="background:rgba(0,229,160,.15);color:var(--accent);border:1px solid rgba(0,229,160,.4)">⬆️ ASCENSO</span>`
+    ?`<span class="badge" style="background:rgba(0,229,160,.15);color:var(--accent);border:1px solid rgba(0,229,160,.4)">⬆️ ASCENSOS</span>`
     :`<span class="badge" style="background:rgba(79,195,247,.15);color:var(--accent3);border:1px solid rgba(79,195,247,.4)">📅 FECHA PROGRAMADA</span>`;
 }
 function renderNovedadesTab(){
@@ -1026,7 +1026,7 @@ function renderSupNovedades(){
     <p style="color:var(--text2);font-size:13px;margin-bottom:14px">Se muestra en la pestaña "Novedades" que ven los jugadores. Podés subir una nueva cada vez que haya un ascenso o se programe una fecha.</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">
       <div class="ig" style="flex:1;min-width:150px"><label>Tipo</label>
-        <select id="novTipo"><option value="ascenso">⬆️ Ascenso</option><option value="fecha">📅 Fecha programada</option></select>
+        <select id="novTipo"><option value="ascenso">⬆️ Ascensos</option><option value="fecha">📅 Fecha programada</option></select>
       </div>
       <div class="ig" style="flex:1;min-width:150px"><label>Fecha (opcional)</label><input id="novFecha" type="date"/></div>
     </div>
