@@ -35,8 +35,8 @@ body::before{content:'';position:fixed;inset:0;background:linear-gradient(rgba(0
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 
 /* LIVE BANNER */
-.live-banner{display:none;align-items:center;justify-content:center;gap:10px;padding:12px 16px;background:linear-gradient(90deg,#ff1f45,#ff4560);color:#fff;text-decoration:none;font-family:'Rajdhani';font-weight:800;letter-spacing:1px;text-transform:uppercase;font-size:14px;text-align:center;animation:liveGlow 2s infinite}
-.live-banner.show{display:flex}
+.live-banner{display:flex;align-items:center;justify-content:center;gap:10px;padding:12px 16px;background:linear-gradient(90deg,#ff1f45,#ff4560);color:#fff;text-decoration:none;font-family:'Rajdhani';font-weight:800;letter-spacing:1px;text-transform:uppercase;font-size:14px;text-align:center;animation:liveGlow 2s infinite}
+.live-banner+.live-banner{border-top:1px solid rgba(255,255,255,.25)}
 .live-dot{width:10px;height:10px;border-radius:50%;background:#fff;animation:pulse .9s infinite;flex:none}
 @keyframes liveGlow{0%,100%{box-shadow:inset 0 0 0 rgba(255,255,255,0)}50%{box-shadow:inset 0 0 30px rgba(255,255,255,.25)}}
 
@@ -268,7 +268,7 @@ tr:last-child td{border-bottom:none}
     <button class="nav-btn" id="pnav-novedades" onclick="showPTab('novedades')">📰 Novedades</button>
     <button class="nav-btn" id="pnav-info" onclick="showPTab('info')">ℹ️ Información</button>
   </nav>
-  <a id="liveBanner" class="live-banner" href="#" target="_blank" rel="noopener"><span class="live-dot"></span><span>EN VIVO — Mirá la transmisión</span></a>
+  <div id="liveBannerWrap"></div>
   <main class="app-main" id="playerContent"></main>
   <div class="ad-banner" id="playerAdBanner">
     <div id="playerAdContent"><span style="font-size:18px">📢</span><span class="ad-text">ZONA DE PUBLICIDAD</span></div>
@@ -513,7 +513,7 @@ const S={
   liga:{categories:[]},ligaEntry:null,ligaCatId:null,
   info:{contacts:[],reglamentoUrl:'',reglamentoName:'',locations:[]},
   novedades:[],
-  live:{active:false,url:''},
+  lives:[],
 };
 function migrateInfo(){
   if(!S.info||typeof S.info!=='object')S.info={contacts:[],reglamentoUrl:'',reglamentoName:'',locations:[]};
@@ -584,22 +584,35 @@ async function save(){
     logoDataUrl:S.logoDataUrl,adDataUrl:S.adDataUrl,bgDataUrl:S.bgDataUrl,
     tournaments:S.tournaments,activeT:S.activeT,
     category:S.category,description:S.description,pairs:S.pairs,zones:S.zones,bracket:S.bracket,started:S.started,bracketBuilt:S.bracketBuilt,
-    liga:S.liga,info:S.info,novedades:S.novedades,live:S.live
+    liga:S.liga,info:S.info,novedades:S.novedades,lives:S.lives
   };
   try{localStorage.setItem('padel_backup_'+ROW_KEY,JSON.stringify(data))}catch(e){}
   await sbUpsert(data);
 }
-async function startLive(){
-  const inp=document.getElementById('liveUrl');
-  const url=(inp?.value||'').trim();
-  if(!url){toast('Pegá el link de la transmisión de YouTube');return}
-  if(!/^https?:\/\//i.test(url)){toast('El link tiene que empezar con http:// o https://');return}
-  S.live={active:true,url};
-  await save();renderSupContent();toast('🔴 Transmisión activada');
+async function addLive(){
+  const inp=document.getElementById('newLiveLabel');
+  S.lives=S.lives||[];
+  const label=(inp?.value||'').trim()||('Cancha '+(S.lives.length+1));
+  S.lives.push({id:uid(),label,active:false,url:''});
+  await save();renderSupContent();toast('✓ Cancha agregada');
 }
-async function stopLive(){
-  S.live={active:false,url:(S.live&&S.live.url)||''};
-  await save();renderSupContent();toast('Transmisión cortada');
+async function removeLive(id){
+  S.lives=(S.lives||[]).filter(l=>l.id!==id);
+  await save();renderSupContent();toast('Cancha quitada');
+}
+async function toggleLive(id,on){
+  const l=(S.lives||[]).find(x=>x.id===id);
+  if(!l)return;
+  if(on){
+    const inp=document.getElementById('liveUrl_'+id);
+    const url=(inp?.value||'').trim();
+    if(!url){toast('Pegá primero el link de YouTube');return}
+    if(!/^https?:\/\//i.test(url)){toast('El link tiene que empezar con http:// o https://');return}
+    l.url=url;l.active=true;
+  }else{
+    l.active=false;
+  }
+  await save();renderSupContent();toast(on?'🔴 Transmisión activada':'Transmisión cortada');
 }
 
 function applyState(d){
@@ -609,8 +622,14 @@ function applyState(d){
   S.liga=d.liga||{categories:[]};migrateLiga();
   S.info=d.info||{contacts:[],reglamentoUrl:'',reglamentoName:'',locations:[]};migrateInfo();
   S.novedades=Array.isArray(d.novedades)?d.novedades:[];
-  S.live=(d.live&&typeof d.live==='object')?{active:!!d.live.active,url:d.live.url||''}:{active:false,url:''};
-  renderLiveBanner();
+  if(Array.isArray(d.lives)){
+    S.lives=d.lives.map(l=>({id:l.id||uid(),label:l.label||'',active:!!l.active,url:l.url||''}));
+  }else if(d.live&&typeof d.live==='object'&&(d.live.url||d.live.active)){
+    S.lives=[{id:uid(),label:'Cancha 1',active:!!d.live.active,url:d.live.url||''}];
+  }else{
+    S.lives=[];
+  }
+  renderLiveBanners();
   if(d.tournaments&&d.tournaments.length){
     S.tournaments=d.tournaments;S.activeT=(typeof d.activeT==='number')?d.activeT:0;
   }else{
@@ -627,16 +646,12 @@ function applyState(d){
   if(S.started){enablePTab('resultados');enableSTab('resultados')}
   if(S.bracketBuilt){enablePTab('bracket');enableSTab('bracket')}
 }
-function renderLiveBanner(){
-  const el=document.getElementById('liveBanner');
-  if(!el)return;
-  if(S.live&&S.live.active&&S.live.url){
-    el.href=S.live.url;
-    el.classList.add('show');
-  }else{
-    el.classList.remove('show');
-    el.removeAttribute('href');
-  }
+function renderLiveBanners(){
+  const wrap=document.getElementById('liveBannerWrap');
+  if(!wrap)return;
+  const actives=(S.lives||[]).filter(l=>l.active&&l.url);
+  if(!actives.length){wrap.innerHTML='';return}
+  wrap.innerHTML=actives.map(l=>`<a class="live-banner" href="${esc(l.url)}" target="_blank" rel="noopener"><span class="live-dot"></span><span>EN VIVO${l.label?' — '+esc(l.label):''} — Mirá la transmisión</span></a>`).join('');
 }
 
 function applyVisuals(){
@@ -1169,17 +1184,29 @@ function renderSupTorneo(){
     <td><button class="btn btn-danger btn-sm" onclick="removeSponsor(${i})">✕</button></td>
   </tr>`).join('');
   const tList=S.tournaments.map((t,i)=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;margin-bottom:6px;background:${i===S.activeT?'rgba(0,229,160,.12)':'rgba(255,255,255,.03)'};border:1px solid ${i===S.activeT?'var(--accent)':'var(--border)'}"><span style="flex:1;font-weight:600;font-size:14px">${esc(t.label||'Torneo '+(i+1))}${i===S.activeT?' <span style="font-size:10px;color:var(--accent)">● gestionando</span>':''}</span>${i===S.activeT?'':`<button class="btn btn-secondary btn-sm" onclick="switchTournament(${i})">Gestionar</button>`}<button class="btn btn-secondary btn-sm" onclick="renameTournament(${i})">✏️</button>${S.tournaments.length>1?`<button class="btn btn-danger btn-sm" onclick="deleteTournament(${i})">🗑️</button>`:''}</div>`).join('');
-  const liveOn=!!(S.live&&S.live.active);
-  return`<div class="card" style="border-color:${liveOn?'#ff4560':'var(--border)'};${liveOn?'background:rgba(255,69,96,.06)':''}">
-    <div class="card-title" style="color:#ff4560">🔴 Transmisión en vivo</div>
-    <p style="color:var(--text2);font-size:13px;margin-bottom:12px">Pegá acá el link del video en vivo de YouTube y tocá "Activar". A los jugadores les va a aparecer un aviso titilando en la app que los lleva directo a la transmisión, no importa en qué pestaña estén. No te olvides de cortarla cuando termine.</p>
-    <div class="ig" style="margin-bottom:12px"><label>Link de la transmisión (YouTube)</label>
-      <input id="liveUrl" placeholder="https://youtube.com/watch?v=..." value="${esc((S.live&&S.live.url)||'')}"/>
+  const lives=S.lives||[];
+  const livesRows=lives.map(l=>{
+    const on=!!l.active;
+    return`<div class="card" style="padding:14px;margin-bottom:10px;border-color:${on?'#ff4560':'var(--border)'};${on?'background:rgba(255,69,96,.06)':''}">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+        <span style="font-weight:700">${esc(l.label||'Transmisión')}</span>
+        ${on?`<span class="badge" style="background:rgba(255,69,96,.15);color:#ff4560;border:1px solid rgba(255,69,96,.4)">🔴 EN VIVO</span>`:''}
+      </div>
+      <div class="ig" style="margin-bottom:10px"><input id="liveUrl_${l.id}" placeholder="https://youtube.com/watch?v=..." value="${esc(l.url||'')}"/></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${on?`<button class="btn btn-danger btn-sm" onclick="toggleLive('${l.id}',false)">⏹ Cortar</button>`:`<button class="btn btn-primary btn-sm" onclick="toggleLive('${l.id}',true)">🔴 Activar</button>`}
+        <button class="btn btn-secondary btn-sm" onclick="removeLive('${l.id}')">🗑️ Quitar cancha</button>
+      </div>
+    </div>`;
+  }).join('');
+  return`<div class="card">
+    <div class="card-title" style="color:#ff4560">🔴 Transmisiones en vivo</div>
+    <p style="color:var(--text2);font-size:13px;margin-bottom:12px">Agregá una por cada cancha que vayan a transmitir. Pegá el link de YouTube de cada una y activala cuando arranque el partido — a los jugadores les va a aparecer un aviso titilando por cada transmisión activa, no importa en qué pestaña estén. No te olvides de cortarla cuando termine.</p>
+    ${livesRows}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+      <div class="ig" style="flex:1;min-width:160px;margin-bottom:0"><label style="font-size:11px">Nombre de la cancha</label><input id="newLiveLabel" placeholder="Ej: Cancha 1"/></div>
+      <button class="btn btn-primary btn-sm" onclick="addLive()">+ Agregar cancha</button>
     </div>
-    ${liveOn?`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <span class="badge" style="background:rgba(255,69,96,.15);color:#ff4560;border:1px solid rgba(255,69,96,.4)">🔴 EN VIVO AHORA</span>
-      <button class="btn btn-danger btn-sm" onclick="stopLive()">⏹ Cortar transmisión</button>
-    </div>`:`<button class="btn btn-primary" onclick="startLive()">🔴 Activar "En vivo"</button>`}
   </div>
   <div class="card">
     <div class="card-title">🗂️ Mis torneos</div>
