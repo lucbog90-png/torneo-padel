@@ -399,8 +399,9 @@ tr:last-child td{border-bottom:none}
 
 <div class="overlay" id="dropPublishModal" style="display:none">
   <div class="modal" style="width:min(520px,100%);max-height:90vh;overflow-y:auto">
-    <h2 style="color:#a855f7">📲 Publicar Partidos del Draws</h2>
-    <p>Imagen vertical lista para historias de Instagram y estados de WhatsApp</p>
+    <h2 style="color:#a855f7">📲 Llave Completa</h2>
+    <p>Imagen del cuadro completo, lista para compartir</p>
+    <div class="ig" style="margin-bottom:12px;text-align:left"><label style="font-size:11px">Sede / Ubicación (para el diseño)</label><input id="dropVenueInput" placeholder="Ej: Los Boulevares" oninput="onDropVenueInput()" onblur="save()"/></div>
     <img id="dropPreview" class="pub-preview" style="display:none"/>
     <div class="modal-btns">
       <button class="btn btn-pub" onclick="downloadDropFlyer()">⬇️ Descargar</button>
@@ -514,6 +515,7 @@ const S={
   info:{contacts:[],reglamentoUrl:'',reglamentoName:'',locations:[]},
   novedades:[],
   lives:[],
+  dropVenue:'',
 };
 function migrateInfo(){
   if(!S.info||typeof S.info!=='object')S.info={contacts:[],reglamentoUrl:'',reglamentoName:'',locations:[]};
@@ -531,7 +533,7 @@ function migrateInfo(){
 let _viewT=0; // torneo cargado en los campos de trabajo (S.pairs, S.zones, ...)
 function migrateT(){
   if(!S.tournaments||!S.tournaments.length){
-    S.tournaments=[{id:uid(),label:S.category||'Torneo 1',category:S.category||'',description:S.description||'',pairs:S.pairs||[],zones:S.zones||[],bracket:S.bracket||[],started:!!S.started,bracketBuilt:!!S.bracketBuilt}];
+    S.tournaments=[{id:uid(),label:S.category||'Torneo 1',category:S.category||'',description:S.description||'',pairs:S.pairs||[],zones:S.zones||[],bracket:S.bracket||[],started:!!S.started,bracketBuilt:!!S.bracketBuilt,dropVenue:S.dropVenue||''}];
     S.activeT=0;
   }
   if(typeof S.activeT!=='number'||S.activeT<0||S.activeT>=S.tournaments.length)S.activeT=0;
@@ -563,6 +565,7 @@ function loadT(i){
   S.published=(typeof t.published==='boolean')?t.published:!!t.started;
   S.ligaEntry=t.ligaEntry||null;
   S.ligaCatId=t.ligaCatId||null;
+  S.dropVenue=t.dropVenue||'';
   _viewT=i;
 }
 function syncT(){
@@ -574,6 +577,7 @@ function syncT(){
   t.published=S.published;
   t.ligaEntry=S.ligaEntry;
   t.ligaCatId=S.ligaCatId;
+  t.dropVenue=S.dropVenue;
 }
 
 async function save(){
@@ -2827,12 +2831,20 @@ function downloadFlyer(){
 }
 
 // ═══════════════════════════════════
-// FLYER DEL DROP (vertical, para historias)
+// FLYER DEL DROP — Llave completa (estilo torneo, ancha)
 // ═══════════════════════════════════
 function openDropPublish(){
   if(!S.bracket.length){toast('Generá el Draws primero');return}
+  const vi=document.getElementById('dropVenueInput');if(vi)vi.value=S.dropVenue||'';
   document.getElementById('dropPublishModal').style.display='flex';
   generateDropFlyer();
+}
+let _dropVenueTimer=null;
+function onDropVenueInput(){
+  const vi=document.getElementById('dropVenueInput');
+  S.dropVenue=(vi?.value||'');
+  clearTimeout(_dropVenueTimer);
+  _dropVenueTimer=setTimeout(generateDropFlyer,250);
 }
 function dropFirstRoundList(){
   // Lista de cruces de la primera ronda (con ambos equipos conocidos) + byes
@@ -2845,15 +2857,107 @@ function dropFirstRoundList(){
   return out;
 }
 function dropSide(team,label){return team?(team.a+' / '+team.b):(label?dropFmtLabel(label):'')}
+function dropMostCommonDay(rounds){
+  const counts={};
+  rounds.forEach(rnd=>rnd.matches.forEach(m=>{const d=m.schedule&&m.schedule.day;if(d)counts[d]=(counts[d]||0)+1}));
+  let best=null,bestN=0;
+  Object.keys(counts).forEach(k=>{if(counts[k]>bestN){best=k;bestN=counts[k]}});
+  return best;
+}
+function drawPill(ctx,x,y,h,text,filled){
+  const padX=22;ctx.font='bold 20px Rajdhani,Arial';
+  const w=Math.ceil(ctx.measureText(text).width)+padX*2;
+  const r=h/2;
+  ctx.beginPath();
+  if(ctx.roundRect)ctx.roundRect(x,y,w,h,r);else ctx.rect(x,y,w,h);
+  if(filled){ctx.fillStyle='#00e5a0';ctx.fill()}
+  else{ctx.fillStyle='rgba(255,255,255,.05)';ctx.fill();ctx.strokeStyle='rgba(255,255,255,.5)';ctx.lineWidth=1.6;ctx.stroke()}
+  ctx.textAlign='left';ctx.textBaseline='middle';
+  ctx.fillStyle=filled?'#06140f':'#fff';
+  ctx.fillText(text,x+padX,y+h/2+1);
+  ctx.textBaseline='alphabetic';
+  return w;
+}
+function drawImgContain(ctx,img,x,y,w,h){
+  const s=Math.min(w/img.width,h/img.height);
+  const iw=img.width*s,ih=img.height*s;
+  ctx.drawImage(img,x+(w-iw)/2,y+(h-ih)/2,iw,ih);
+}
+// Calcula cómo entran los auspiciantes en filas (wrap) según el ancho disponible,
+// para que nunca se corten aunque haya muchos logos o el cuadro sea angosto.
+function layoutSponsorRows(ctx,sponsors,maxWidth){
+  const items=(sponsors||[]).filter(sp=>sp.logoUrl||sp.name);
+  const d=52,gap=20,rowGap=80;
+  ctx.font='bold 15px Rajdhani,Arial';
+  const widths=items.map(sp=>sp.logoUrl?d:Math.max(d,ctx.measureText((sp.name||'').toUpperCase()).width+16));
+  const rows=[];let row=[],rowW=0;
+  items.forEach((sp,i)=>{
+    const w=widths[i];
+    const addW=row.length?w+gap:w;
+    if(row.length&&rowW+addW>maxWidth){rows.push(row);row=[];rowW=0}
+    row.push({sp,w});rowW+=(row.length===1?w:w+gap);
+  });
+  if(row.length)rows.push(row);
+  return{rows,d,gap,rowGap};
+}
+function drawSponsorRows(ctx,cx,topY,layout,done){
+  const{rows,d,gap,rowGap}=layout;
+  if(!rows.length){done();return}
+  const urls=[];rows.forEach(r=>r.forEach(it=>{if(it.sp.logoUrl)urls.push(it.sp.logoUrl)}));
+  loadImgs(urls,imgs=>{
+    let ui=0;
+    rows.forEach((row,ri)=>{
+      const totalW=row.reduce((a,it,i)=>a+it.w+(i?gap:0),0);
+      let x=cx-totalW/2;const cy=topY+ri*rowGap;
+      row.forEach(({sp,w})=>{
+        if(sp.logoUrl){
+          const im=imgs[ui++];
+          ctx.save();ctx.beginPath();ctx.arc(x+d/2,cy,d/2,0,Math.PI*2);ctx.closePath();ctx.clip();
+          ctx.fillStyle='#0d1420';ctx.fillRect(x,cy-d/2,d,d);
+          if(im)drawImgContain(ctx,im,x,cy-d/2,d,d);
+          ctx.restore();
+          ctx.beginPath();ctx.arc(x+d/2,cy,d/2,0,Math.PI*2);ctx.strokeStyle='rgba(255,255,255,.2)';ctx.lineWidth=1.4;ctx.stroke();
+        }else{
+          ctx.font='bold 15px Rajdhani,Arial';ctx.fillStyle='rgba(255,255,255,.7)';ctx.textAlign='center';ctx.textBaseline='middle';
+          ctx.fillText((sp.name||'').toUpperCase(),x+w/2,cy);ctx.textBaseline='alphabetic';
+        }
+        x+=w+gap;
+      });
+    });
+    done();
+  });
+}
 function generateDropFlyer(){
   const rounds=S.bracket;if(!rounds.length)return;
   const R=rounds.length,m0=rounds[0].matches.length;
-  const colW=430,boxW=350,mBoxH=224,gap0=26,slot0=mBoxH+gap0;
-  const marginX=50,headerTop=220,footerH=130,champW=300;
+  const colW=400,boxW=340,mBoxH=210,gap0=32,slot0=mBoxH+gap0;
+  const marginX=70;
+  const logoBoxX=marginX,logoBoxY=56,logoBoxW=150,logoBoxH=150;
+  const headerTextX=logoBoxX+logoBoxW+36;
+  const badgesY=210,badgeH=42;
+  const headerBottom=badgesY+badgeH+30;
+  const colHeaderBase=headerBottom+22,colHeaderUnderline=colHeaderBase+14;
+  const bracketTop=colHeaderUnderline+32;
   const contentH=m0*mBoxH+(m0-1)*gap0;
-  const Wc=marginX+R*colW+champW+marginX;
-  const bracketTop=headerTop+24;
-  const Hc=Math.max(1000,Math.ceil(bracketTop+contentH+footerH+40));
+  const mctx=measureCtx();
+  mctx.font=`bold 66px 'Bebas Neue',Impact,sans-serif`;
+  const titleW=mctx.measureText('LLAVE COMPLETA').width;
+  mctx.font='bold 17px Rajdhani,Arial';
+  const pretitleW=mctx.measureText('TORNEO '+new Date().getFullYear()).width+36;
+  mctx.font='bold 20px Rajdhani,Arial';
+  const dayTxt=dropMostCommonDay(rounds);
+  let badgesW=0;
+  if(dayTxt)badgesW+=mctx.measureText(dayTxt.toUpperCase()).width+44+16;
+  if(S.dropVenue)badgesW+=mctx.measureText(S.dropVenue.toUpperCase()).width+44;
+  const headerContentW=Math.max(titleW,pretitleW,badgesW);
+  const minWc=headerTextX+headerContentW+marginX;
+  const Wc=Math.max(marginX+R*colW+marginX,Math.ceil(minWc));
+  const spLayout=layoutSponsorRows(measureCtx(),S.sponsors,Wc-marginX*2);
+  const spRows=spLayout.rows.length;
+  const sedeY=bracketTop+contentH+44;
+  const logosY=sedeY+62;
+  const auspicY=spRows?(logosY+(spRows-1)*spLayout.rowGap+56):(sedeY+40);
+  const Hc=Math.max(1080,Math.ceil(auspicY+30));
   const canvas=document.getElementById('dropCanvas');
   canvas.width=Wc;canvas.height=Hc;
   const ctx=canvas.getContext('2d');
@@ -2861,59 +2965,97 @@ function generateDropFlyer(){
   centers[0]=[];for(let i=0;i<m0;i++)centers[0][i]=bracketTop+i*slot0+mBoxH/2;
   for(let r=1;r<R;r++){centers[r]=[];const prev=centers[r-1];for(let i=0;i<rounds[r].matches.length;i++)centers[r][i]=(prev[2*i]+prev[2*i+1])/2}
   const xCol=r=>marginX+r*colW;
-  const plain=()=>{const g=ctx.createLinearGradient(0,0,Wc,Hc);g.addColorStop(0,'#0a1628');g.addColorStop(1,'#050d1a');ctx.fillStyle=g;ctx.fillRect(0,0,Wc,Hc)};
+  const bg=()=>{
+    const g=ctx.createLinearGradient(0,0,Wc,Hc);g.addColorStop(0,'#0b1220');g.addColorStop(.55,'#080d16');g.addColorStop(1,'#050810');
+    ctx.fillStyle=g;ctx.fillRect(0,0,Wc,Hc);
+    const rg=ctx.createRadialGradient(Wc*0.85,0,0,Wc*0.85,0,Wc*0.6);
+    rg.addColorStop(0,'rgba(0,229,160,.10)');rg.addColorStop(1,'rgba(0,229,160,0)');
+    ctx.fillStyle=rg;ctx.fillRect(0,0,Wc,Hc);
+  };
+  const line=(x,teamLabel,teamText,y,color,bold)=>{
+    let lx=x;
+    if(teamLabel){ctx.font='bold 16px Rajdhani,Arial';ctx.fillStyle='#4fc3f7';ctx.textAlign='left';ctx.fillText(teamLabel,lx,y);lx+=ctx.measureText(teamLabel).width+12}
+    ctx.font=`${bold?'bold ':''}20px Rajdhani,Arial`;ctx.fillStyle=color;ctx.textAlign='left';
+    return{x:lx,y};
+  };
   const drawBox=(x,cy,m)=>{
     const top=cy-mBoxH/2;
     const aW=m.status==='done'&&m.winner===m.teamA?.id,bW=m.status==='done'&&m.winner===m.teamB?.id;
-    const la=dropSide(m.teamA,m.labelA),lb=m.isBye?'BYE':dropSide(m.teamB,m.labelB);
-    const empty=!la&&!lb;
-    // Card elevada: fondo más claro que el resto de la imagen + sombra, para que resalte
+    const hasA=!!m.teamA,hasB=!!m.teamB;
+    const la=dropSide(m.teamA,m.labelA)||'A DEFINIR',lb=m.isBye?'BYE':(dropSide(m.teamB,m.labelB)||'A DEFINIR');
+    const pending=!hasA&&!hasB;
     ctx.save();
-    ctx.shadowColor='rgba(0,0,0,.55)';ctx.shadowBlur=20;ctx.shadowOffsetY=7;
-    ctx.fillStyle=empty?'rgba(23,37,63,.55)':'rgba(23,37,63,.98)';
-    if(ctx.roundRect){ctx.beginPath();ctx.roundRect(x,top,boxW,mBoxH,14);ctx.fill()}else ctx.fillRect(x,top,boxW,mBoxH);
+    ctx.shadowColor='rgba(0,0,0,.5)';ctx.shadowBlur=18;ctx.shadowOffsetY=6;
+    ctx.fillStyle=pending?'rgba(14,22,38,.55)':'rgba(14,22,38,.95)';
+    if(ctx.roundRect){ctx.beginPath();ctx.roundRect(x,top,boxW,mBoxH,12);ctx.fill()}else ctx.fillRect(x,top,boxW,mBoxH);
     ctx.restore();
-    ctx.strokeStyle='rgba(79,195,247,.75)';ctx.lineWidth=2.2;
-    if(ctx.roundRect){ctx.beginPath();ctx.roundRect(x,top,boxW,mBoxH,14);ctx.stroke()}else ctx.strokeRect(x,top,boxW,mBoxH);
-    ctx.textAlign='left';
+    ctx.strokeStyle=pending?'rgba(79,195,247,.25)':'rgba(79,195,247,.6)';
+    ctx.lineWidth=1.6;ctx.setLineDash(pending?[5,4]:[]);
+    if(ctx.roundRect){ctx.beginPath();ctx.roundRect(x,top,boxW,mBoxH,12);ctx.stroke()}else ctx.strokeRect(x,top,boxW,mBoxH);
+    ctx.setLineDash([]);
     const textMaxW=boxW-32;
-    // --- Equipo A ---
-    let colorA,boldA;
-    if(aW){colorA='#00e5a0';boldA=true}
-    else if(bW){colorA='rgba(255,255,255,.5)';boldA=false}
-    else{colorA='#fff';boldA=true}
-    if(m.labelA&&la){ctx.font='bold 16px Rajdhani,Arial';ctx.fillStyle='rgba(120,210,255,1)';ctx.fillText(m.labelA,x+16,top+22)}
-    ctx.font=`${boldA?'bold ':''}25px Rajdhani,Arial`;ctx.fillStyle=colorA;
-    const linesA=wrapTeamName(ctx,la,textMaxW);
-    ctx.fillText(linesA[0],x+16,top+50);
-    if(linesA[1])ctx.fillText(linesA[1],x+16,top+79);
-    ctx.beginPath();ctx.moveTo(x+10,top+92);ctx.lineTo(x+boxW-10,top+92);ctx.strokeStyle='rgba(255,255,255,.2)';ctx.lineWidth=1.2;ctx.stroke();
-    // --- Equipo B ---
-    let colorB,boldB;
-    if(bW){colorB='#00e5a0';boldB=true}
-    else if(m.isBye){colorB='#ffd700';boldB=false}
-    else if(aW){colorB='rgba(255,255,255,.5)';boldB=false}
-    else{colorB='#fff';boldB=true}
-    if(m.labelB&&lb&&!m.isBye){ctx.font='bold 16px Rajdhani,Arial';ctx.fillStyle='rgba(120,210,255,1)';ctx.fillText(m.labelB,x+16,top+116)}
-    ctx.font=`${boldB?'bold ':''}25px Rajdhani,Arial`;ctx.fillStyle=colorB;
-    const linesB=wrapTeamName(ctx,lb,textMaxW);
-    ctx.fillText(linesB[0],x+16,top+144);
-    if(linesB[1])ctx.fillText(linesB[1],x+16,top+173);
-    const sc=m.schedule;
-    if(sc&&(sc.day||sc.time||sc.court)){
-      ctx.beginPath();ctx.moveTo(x+12,top+188);ctx.lineTo(x+boxW-12,top+188);ctx.strokeStyle='rgba(255,255,255,.22)';ctx.lineWidth=1.2;ctx.stroke();
-      const parts=[sc.day,sc.time,sc.court].filter(Boolean).join(' · ');
-      ctx.textAlign='left';ctx.font='bold 18px Rajdhani,Arial';ctx.fillStyle='#ffc24a';ctx.fillText(truncate(parts,40),x+16,top+210);
+    // --- Equipo/lado A ---
+    let colorA=aW?'#00e5a0':(bW?'rgba(255,255,255,.45)':(hasA?'#fff':'rgba(255,255,255,.4)'));
+    let lx=x+16;
+    if(m.labelA){ctx.font='bold 16px Rajdhani,Arial';ctx.fillStyle='#4fc3f7';ctx.textAlign='left';ctx.fillText(m.labelA,lx,top+34);lx+=ctx.measureText(m.labelA).width+12}
+    ctx.font=`${aW||!hasA?'bold ':'bold '}20px Rajdhani,Arial`;ctx.fillStyle=colorA;
+    const linesA=wrapTeamName(ctx,la,x+16+boxW-32-(lx-(x+16)));
+    ctx.fillText(linesA[0],lx,top+34);
+    if(linesA[1])ctx.fillText(linesA[1],x+16,top+60);
+    ctx.beginPath();ctx.moveTo(x+10,top+76);ctx.lineTo(x+boxW-10,top+76);ctx.strokeStyle='rgba(255,255,255,.15)';ctx.lineWidth=1;ctx.stroke();
+    if(m.isBye){
+      ctx.font='bold 20px Rajdhani,Arial';ctx.fillStyle='rgba(255,255,255,.4)';ctx.textAlign='left';ctx.fillText('BYE',x+16,top+108);
+      ctx.font='bold 18px Rajdhani,Arial';ctx.fillStyle='#00e5a0';ctx.fillText('PASA DIRECTO',x+16,top+150);
+    }else{
+      let colorB=bW?'#00e5a0':(aW?'rgba(255,255,255,.45)':(hasB?'#fff':'rgba(255,255,255,.4)'));
+      let lxb=x+16;
+      if(m.labelB){ctx.font='bold 16px Rajdhani,Arial';ctx.fillStyle='#4fc3f7';ctx.textAlign='left';ctx.fillText(m.labelB,lxb,top+108);lxb+=ctx.measureText(m.labelB).width+12}
+      ctx.font='bold 20px Rajdhani,Arial';ctx.fillStyle=colorB;
+      const linesB=wrapTeamName(ctx,lb,x+16+boxW-32-(lxb-(x+16)));
+      ctx.fillText(linesB[0],lxb,top+108);
+      if(linesB[1])ctx.fillText(linesB[1],x+16,top+134);
+      const sc=m.schedule;
+      if(sc&&(sc.day||sc.time||sc.court)){
+        ctx.beginPath();ctx.moveTo(x+12,top+150);ctx.lineTo(x+boxW-12,top+150);ctx.strokeStyle='rgba(255,255,255,.15)';ctx.lineWidth=1;ctx.stroke();
+        const parts=[sc.day,sc.time].filter(Boolean).join(' · ');
+        ctx.textAlign='left';ctx.font='bold 18px Rajdhani,Arial';ctx.fillStyle='#00e5a0';ctx.fillText(truncate(parts.toUpperCase(),36),x+16,top+180);
+        if(sc.court){ctx.font='14px Rajdhani,Arial';ctx.fillStyle='rgba(255,255,255,.4)';ctx.fillText(truncate(sc.court,30),x+16,top+198)}
+      }
     }
   };
   const draw=()=>{
-    const ov=ctx.createLinearGradient(0,0,0,Hc);ov.addColorStop(0,'rgba(0,0,0,.8)');ov.addColorStop(1,'rgba(0,0,0,.9)');ctx.fillStyle=ov;ctx.fillRect(0,0,Wc,Hc);
-    ctx.fillStyle='#00e5a0';ctx.fillRect(0,0,Wc,7);ctx.fillStyle='#ff6b35';ctx.fillRect(0,Hc-7,Wc,7);
-    ctx.textAlign='center';
-    ctx.font=`bold 62px 'Bebas Neue',Impact,sans-serif`;ctx.fillStyle='#00e5a0';ctx.fillText(S.name.toUpperCase(),Wc/2,92);
-    ctx.font=`bold 44px 'Bebas Neue',Impact,sans-serif`;ctx.fillStyle='#4fc3f7';ctx.fillText('🏆 DRAWS · LLAVE COMPLETA'+(S.category?' · '+S.category.toUpperCase():''),Wc/2,144);
-    for(let r=0;r<R;r++){ctx.textAlign='center';ctx.font='bold 26px Rajdhani,Arial';ctx.fillStyle='rgba(120,210,255,1)';ctx.fillText((rounds[r].name||'').toUpperCase(),xCol(r)+boxW/2,headerTop+6)}
-    ctx.strokeStyle='rgba(79,195,247,.4)';ctx.lineWidth=1.8;
+    bg();
+    // logo
+    const drawHeader=()=>{
+      let y=96;
+      ctx.textAlign='left';
+      ctx.strokeStyle='#00e5a0';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(headerTextX,y-6);ctx.lineTo(headerTextX+26,y-6);ctx.stroke();
+      ctx.font='bold 17px Rajdhani,Arial';ctx.fillStyle='#00e5a0';ctx.fillText('TORNEO '+new Date().getFullYear(),headerTextX+36,y);
+      ctx.font=`bold 66px 'Bebas Neue',Impact,sans-serif`;ctx.fillStyle='#fff';
+      ctx.fillText('LLAVE COMPLETA',headerTextX,y+66);
+      let bx=headerTextX,by=badgesY;
+      const day=dropMostCommonDay(rounds);
+      if(day)bx+=drawPill(ctx,bx,by,badgeH,day.toUpperCase(),true)+16;
+      if(S.dropVenue)drawPill(ctx,bx,by,badgeH,S.dropVenue.toUpperCase(),false);
+      // headers de ronda
+      for(let r=0;r<R;r++){
+        const isFinal=r===R-1;
+        ctx.textAlign='center';ctx.font='bold 20px Rajdhani,Arial';ctx.fillStyle=isFinal?'#ffd700':'#fff';
+        const cx0=xCol(r)+boxW/2;
+        ctx.fillText((rounds[r].name||'').toUpperCase(),cx0,colHeaderBase);
+        ctx.strokeStyle=isFinal?'rgba(255,215,0,.6)':'rgba(0,229,160,.5)';ctx.lineWidth=1.4;
+        ctx.beginPath();ctx.moveTo(xCol(r)+boxW*0.15,colHeaderUnderline);ctx.lineTo(xCol(r)+boxW*0.85,colHeaderUnderline);ctx.stroke();
+      }
+      finishBody();
+    };
+    if(S.logoDataUrl){
+      const li=new Image();li.crossOrigin='anonymous';
+      li.onload=()=>{drawImgContain(ctx,li,logoBoxX,logoBoxY,logoBoxW,logoBoxH);drawHeader()};
+      li.onerror=drawHeader;li.src=S.logoDataUrl;
+    }else drawHeader();
+  };
+  const finishBody=()=>{
+    ctx.strokeStyle='rgba(79,195,247,.35)';ctx.lineWidth=1.6;
     for(let r=0;r<R-1;r++){
       const x1=xCol(r)+boxW,x2=xCol(r+1),midX=(x1+x2)/2;
       for(let p=0;p<rounds[r+1].matches.length;p++){
@@ -2921,24 +3063,46 @@ function generateDropFlyer(){
         ctx.beginPath();ctx.moveTo(x1,c1);ctx.lineTo(midX,c1);ctx.moveTo(x1,c2);ctx.lineTo(midX,c2);ctx.moveTo(midX,c1);ctx.lineTo(midX,c2);ctx.moveTo(midX,pc);ctx.lineTo(x2,pc);ctx.stroke();
       }
     }
-    for(let r=0;r<R;r++)for(let i=0;i<rounds[r].matches.length;i++)drawBox(xCol(r),centers[r][i],rounds[r].matches[i]);
+    for(let r=0;r<R-1;r++)for(let i=0;i<rounds[r].matches.length;i++)drawBox(xCol(r),centers[r][i],rounds[r].matches[i]);
+    // --- Columna FINAL: caja del partido final + card CAMPEÓN apilada debajo ---
     const fin=rounds[R-1].matches[0];
     const champ=fin&&fin.winner?(fin.winner===fin.teamA?.id?fin.teamA:fin.teamB):null;
-    const cxC=xCol(R-1)+boxW+30,cyC=centers[R-1][0],cwC=champW-50;
-    ctx.beginPath();ctx.moveTo(xCol(R-1)+boxW,cyC);ctx.lineTo(cxC,cyC);ctx.strokeStyle='#ffd700';ctx.lineWidth=2.2;ctx.stroke();
-    ctx.save();ctx.shadowColor='rgba(0,0,0,.55)';ctx.shadowBlur=20;ctx.shadowOffsetY=7;
-    ctx.fillStyle='rgba(40,32,10,.92)';if(ctx.roundRect){ctx.beginPath();ctx.roundRect(cxC,cyC-60,cwC,120,14);ctx.fill()}else ctx.fillRect(cxC,cyC-60,cwC,120);
+    const fx=xCol(R-1),cyC=centers[R-1][0],finTop=cyC-mBoxH/2,finH=mBoxH-60;
+    ctx.save();ctx.shadowColor='rgba(0,0,0,.5)';ctx.shadowBlur=18;ctx.shadowOffsetY=6;
+    ctx.fillStyle='rgba(10,14,22,.95)';if(ctx.roundRect){ctx.beginPath();ctx.roundRect(fx,finTop,boxW,finH,12);ctx.fill()}else ctx.fillRect(fx,finTop,boxW,finH);
     ctx.restore();
-    ctx.strokeStyle='#ffd700';ctx.lineWidth=2.2;if(ctx.roundRect){ctx.beginPath();ctx.roundRect(cxC,cyC-60,cwC,120,14);ctx.stroke()}else ctx.strokeRect(cxC,cyC-60,cwC,120);
-    ctx.textAlign='center';ctx.font=`bold 23px 'Bebas Neue',Impact,sans-serif`;ctx.fillStyle='#ffd700';ctx.fillText('🏆 CAMPEÓN',cxC+cwC/2,cyC-28);
-    ctx.font='bold 24px Rajdhani,Arial';ctx.fillStyle='#fff';
-    const champLines=champ?wrapTeamName(ctx,champ.a+' / '+champ.b,cwC-36):['A definir'];
-    ctx.fillText(champLines[0],cxC+cwC/2,cyC+6);
-    if(champLines[1])ctx.fillText(champLines[1],cxC+cwC/2,cyC+32);
-    drawAdsStrip(ctx,Wc,Hc-118,110,finalizeDrop);
+    ctx.strokeStyle='rgba(255,215,0,.55)';ctx.lineWidth=1.6;if(ctx.roundRect){ctx.beginPath();ctx.roundRect(fx,finTop,boxW,finH,12);ctx.stroke()}else ctx.strokeRect(fx,finTop,boxW,finH);
+    ctx.textAlign='left';ctx.font='bold 20px Rajdhani,Arial';ctx.fillStyle='#fff';
+    const nameA=dropSide(fin?.teamA,fin?.labelA)||'A DEFINIR',nameB=dropSide(fin?.teamB,fin?.labelB)||'A DEFINIR';
+    const lA=wrapTeamName(ctx,nameA,boxW-32);ctx.fillText(lA[0],fx+16,finTop+34);
+    const lB=wrapTeamName(ctx,nameB,boxW-32);ctx.fillText(lB[0],fx+16,finTop+70);
+    const sc=fin&&fin.schedule;
+    if(sc&&(sc.day||sc.time)){ctx.font='bold 16px Rajdhani,Arial';ctx.fillStyle='#ffd700';ctx.fillText(truncate([sc.day,sc.time].filter(Boolean).join(' · ').toUpperCase(),34),fx+16,finTop+finH-16)}
+    // Card campeón (apilada debajo del partido final)
+    const champTop=finTop+finH+24,champH=100;
+    ctx.save();ctx.shadowColor='rgba(255,193,7,.35)';ctx.shadowBlur=18;
+    ctx.fillStyle='#ffc107';if(ctx.roundRect){ctx.beginPath();ctx.roundRect(fx,champTop,boxW,champH,14);ctx.fill()}else ctx.fillRect(fx,champTop,boxW,champH);
+    ctx.restore();
+    ctx.textAlign='center';ctx.font=`bold 22px 'Bebas Neue',Impact,sans-serif`;ctx.fillStyle='#1a1300';
+    ctx.fillText('CAMPEÓN',fx+boxW/2,champTop+38);
+    ctx.font='bold 18px Rajdhani,Arial';ctx.fillStyle='#3a2b00';
+    const champTxt=champ?(champ.a+' / '+champ.b):'A DEFINIR';
+    const champLines=wrapTeamName(ctx,champTxt,boxW-36);
+    ctx.fillText(champLines[0],fx+boxW/2,champTop+68);
+    // footer
+    ctx.textAlign='right';ctx.font='bold 16px Rajdhani,Arial';ctx.fillStyle='rgba(0,229,160,.9)';
+    const sedeTxt='● SEDE'+(S.dropVenue?(' · '+S.dropVenue.toUpperCase()):'');
+    ctx.fillText(sedeTxt,Wc-marginX,sedeY);
+    ctx.beginPath();ctx.moveTo(marginX,sedeY-30);ctx.lineTo(Wc-marginX,sedeY-30);ctx.strokeStyle='rgba(255,255,255,.1)';ctx.lineWidth=1;ctx.stroke();
+    if(spRows){
+      ctx.textAlign='left';ctx.font='bold 13px Rajdhani,Arial';ctx.fillStyle='rgba(255,255,255,.4)';
+      ctx.fillText('AUSPICIANTES',marginX,auspicY);
+      drawSponsorRows(ctx,Wc/2,logosY,spLayout,finalizeDrop);
+    }else{
+      finalizeDrop();
+    }
   };
-  if(S.bgDataUrl){const img=new Image();img.crossOrigin='anonymous';img.onload=()=>{ctx.drawImage(img,0,0,Wc,Hc);draw()};img.onerror=()=>{plain();draw()};img.src=S.bgDataUrl}
-  else{plain();draw()}
+  draw();
 }
 function finalizeDrop(){
   const c=document.getElementById('dropCanvas'),p=document.getElementById('dropPreview');
@@ -2947,7 +3111,7 @@ function finalizeDrop(){
 }
 function downloadDropFlyer(){
   const c=document.getElementById('dropCanvas');
-  try{const a=document.createElement('a');a.download=`${S.name.replace(/\s+/g,'_')}_cruces.png`;a.href=c.toDataURL('image/png');a.click();toast('✓ Descargada')}
+  try{const a=document.createElement('a');a.download=`${S.name.replace(/\s+/g,'_')}_llave.png`;a.href=c.toDataURL('image/png');a.click();toast('✓ Descargada')}
   catch(e){toast('⚠️ No se pudo exportar la imagen',3500)}
 }
 
