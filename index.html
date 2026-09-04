@@ -2996,10 +2996,10 @@ function generateDropFlyer(){
     const textMaxW=boxW-32;
     // --- Equipo/lado A ---
     let colorA=aW?'#00e5a0':(bW?'rgba(255,255,255,.45)':(hasA?'#fff':'rgba(255,255,255,.4)'));
-    let lx=x+16;
-    if(m.labelA){ctx.font='bold 16px Rajdhani,Arial';ctx.fillStyle='#4fc3f7';ctx.textAlign='left';ctx.fillText(m.labelA,lx,top+34);lx+=ctx.measureText(m.labelA).width+12}
+    let lx=x+16,offA=0;
+    if(m.labelA){ctx.font='bold 16px Rajdhani,Arial';ctx.fillStyle='#4fc3f7';ctx.textAlign='left';ctx.fillText(m.labelA,lx,top+34);offA=ctx.measureText(m.labelA).width+12;lx+=offA}
     ctx.font=`${aW||!hasA?'bold ':'bold '}20px Rajdhani,Arial`;ctx.fillStyle=colorA;
-    const linesA=wrapTeamName(ctx,la,x+16+boxW-32-(lx-(x+16)));
+    const linesA=wrapTeamName(ctx,la,(boxW-32)-offA);
     ctx.fillText(linesA[0],lx,top+34);
     if(linesA[1])ctx.fillText(linesA[1],x+16,top+60);
     ctx.beginPath();ctx.moveTo(x+10,top+76);ctx.lineTo(x+boxW-10,top+76);ctx.strokeStyle='rgba(255,255,255,.15)';ctx.lineWidth=1;ctx.stroke();
@@ -3008,10 +3008,10 @@ function generateDropFlyer(){
       ctx.font='bold 18px Rajdhani,Arial';ctx.fillStyle='#00e5a0';ctx.fillText('PASA DIRECTO',x+16,top+150);
     }else{
       let colorB=bW?'#00e5a0':(aW?'rgba(255,255,255,.45)':(hasB?'#fff':'rgba(255,255,255,.4)'));
-      let lxb=x+16;
-      if(m.labelB){ctx.font='bold 16px Rajdhani,Arial';ctx.fillStyle='#4fc3f7';ctx.textAlign='left';ctx.fillText(m.labelB,lxb,top+108);lxb+=ctx.measureText(m.labelB).width+12}
+      let lxb=x+16,offB=0;
+      if(m.labelB){ctx.font='bold 16px Rajdhani,Arial';ctx.fillStyle='#4fc3f7';ctx.textAlign='left';ctx.fillText(m.labelB,lxb,top+108);offB=ctx.measureText(m.labelB).width+12;lxb+=offB}
       ctx.font='bold 20px Rajdhani,Arial';ctx.fillStyle=colorB;
-      const linesB=wrapTeamName(ctx,lb,x+16+boxW-32-(lxb-(x+16)));
+      const linesB=wrapTeamName(ctx,lb,(boxW-32)-offB);
       ctx.fillText(linesB[0],lxb,top+108);
       if(linesB[1])ctx.fillText(linesB[1],x+16,top+134);
       const sc=m.schedule;
