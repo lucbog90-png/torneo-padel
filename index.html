@@ -1789,6 +1789,42 @@ function buildDropGeneric(){
   propByes(rounds);
   return rounds;
 }
+// Genera una "huella" estable para un partido del cuadro, para poder reconocer
+// el mismo cruce aunque el cuadro se vuelva a generar y cambie de forma/tamaño
+// (por ejemplo, al cerrarse más zonas). Así no se pierden los días/horarios
+// que ya haya cargado el supervisor.
+function scheduleKeysForMatch(m,ri){
+  const keys=[];
+  // El emparejamiento por equipos ya conocidos (o bye ya resuelto) es único en todo
+  // el cuadro (una vez que un equipo pierde no puede volver a aparecer), así que no
+  // hace falta acotarlo por ronda.
+  if(m.teamA&&m.teamA.id&&m.teamB&&m.teamB.id)keys.push('t:'+[m.teamA.id,m.teamB.id].sort().join('|'));
+  else if(m.isBye&&m.teamA&&m.teamA.id)keys.push('bye:'+m.teamA.id);
+  // La etiqueta de zona (ej. "1°A") en cambio SÍ hay que acotarla por ronda: cuando
+  // un bye pasa directo, esa misma etiqueta se copia también al partido de la ronda
+  // siguiente que lo está esperando, y sin el prefijo de ronda ambos matchearían
+  // con la misma clave por error.
+  if(m.labelA||m.labelB)keys.push('r'+ri+'l:'+[m.labelA||'',m.labelB||''].sort().join('|'));
+  return keys;
+}
+function preserveSchedules(oldRounds,newRounds){
+  if(!oldRounds||!oldRounds.length)return;
+  const byKey={};
+  oldRounds.forEach((rd,ri)=>rd.matches.forEach(m=>{if(m.schedule)scheduleKeysForMatch(m,ri).forEach(k=>{byKey[k]=m.schedule})}));
+  newRounds.forEach((rd,ri)=>rd.matches.forEach(m=>{
+    if(m.schedule)return;
+    for(const k of scheduleKeysForMatch(m,ri)){if(byKey[k]){m.schedule=byKey[k];return}}
+  }));
+  // Respaldo por posición para rondas futuras (semis/final) sin equipos definidos
+  // todavía, y solo si esa ronda tiene exactamente la misma cantidad de partidos
+  // que antes (si cambió de tamaño, la posición ya no significa lo mismo).
+  newRounds.forEach((rd,ri)=>rd.matches.forEach((m,mi)=>{
+    if(m.schedule)return;
+    const oldRd=oldRounds[ri];
+    const old=oldRd&&oldRd.matches.length===rd.matches.length&&oldRd.matches[mi];
+    if(old&&old.schedule)m.schedule=old.schedule;
+  }));
+}
 async function buildDrop(){
   const map={};
   S.zones.forEach(z=>{(z.qualified||[]).forEach((pair,i)=>{map[`${i+1}${z.letter}`]=pair})});
@@ -1803,6 +1839,7 @@ async function buildDrop(){
     rounds=buildDropGeneric();
   }
   if(!rounds||!rounds.length){toast('Sin clasificados suficientes');return}
+  preserveSchedules(S.bracket,rounds);
   S.bracket=rounds;S.bracketBuilt=true;await save();
   enableSTab('bracket');enablePTab('bracket');showSTab('bracket');toast('¡Draws generado!');
 }
@@ -1833,9 +1870,7 @@ function refreshDrop(){
   if(S.bracket&&S.bracket.length&&S.bracket.some(r=>r.matches.some(m=>m.status==='done'&&!m.isBye)))return;
   const rounds=buildDropBracket();
   if(!rounds||!rounds.length)return;
-  if(S.bracket&&S.bracket.length){
-    rounds.forEach((rd,ri)=>rd.matches.forEach((m,mi)=>{const old=S.bracket[ri]&&S.bracket[ri].matches[mi];if(old&&old.schedule)m.schedule=old.schedule;}));
-  }
+  preserveSchedules(S.bracket,rounds);
   S.bracket=rounds;S.bracketBuilt=true;
 }
 function seededBracket(cl,size){const s=new Array(size).fill(null);const p=bPos(size);cl.forEach((c,i)=>{if(p[i]!==undefined)s[p[i]]=c});return s}
