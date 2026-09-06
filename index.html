@@ -932,7 +932,14 @@ function playerTSelector(){
 function enterSup(){
   stopRefresh();showScreen('supScreen');applyVisuals();
   _viewT=S.activeT;if(S.tournaments)loadT(_viewT);
-  if(S.started){enableSTab('resultados');refreshDrop();save();}else{disableSTab('resultados');disableSTab('bracket')}
+  // OJO: antes acá se llamaba a refreshDrop()+save() cada vez que el supervisor
+  // entraba a esta pantalla (incluso solo para mirarla). Eso volvía a armar el
+  // cuadro de draws desde cero en cada visita -aunque nada hubiera cambiado-, lo
+  // que era innecesario (el cuadro ya se actualiza y guarda solo, en el momento
+  // justo, cuando se carga un resultado de zona) y con cada regeneración de más
+  // había una chance de que se desalinearan los horarios ya cargados. El cuadro
+  // que se cargó de S ya viene actualizado, así que no hace falta recalcularlo acá.
+  if(S.started){enableSTab('resultados')}else{disableSTab('resultados');disableSTab('bracket')}
   if(S.bracketBuilt)enableSTab('bracket');
   showSTab('torneo');
 }
