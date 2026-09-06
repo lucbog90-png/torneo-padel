@@ -2207,11 +2207,11 @@ async function undoLigaLoad(){
 }
 function getBM(ri,mId){return S.bracket[ri]?.matches.find(m=>m.id===mId)}
 function collectBS(ri,mId,sets,mode){return sets.map((_,i)=>({a:parseInt(document.getElementById(`bs_${ri}_${mId}_${i}_a`)?.value)||0,b:parseInt(document.getElementById(`bs_${ri}_${mId}_${i}_b`)?.value)||0,stb:i===2&&mode!=='normal'}))}
-function setBSet3Mode(ri,mId,mode){const m=getBM(ri,mId);if(!m)return;m.editSets=collectBS(ri,mId,m.editSets||[],m.editSet3Mode);m.editSet3Mode=mode;renderSupContent()}
-function addBS(ri,mId){const m=getBM(ri,mId);if(!m)return;m.editSets=collectBS(ri,mId,m.editSets||[],m.editSet3Mode);m.editSets.push({a:'',b:''});renderSupContent()}
-function rmBS(ri,mId,i){const m=getBM(ri,mId);if(!m)return;m.editSets=collectBS(ri,mId,m.editSets||[],m.editSet3Mode);m.editSets.splice(i,1);renderSupContent()}
-function setBW(ri,mId,wId){const m=getBM(ri,mId);if(!m)return;m.editSets=collectBS(ri,mId,m.editSets||[],m.editSet3Mode);m.editWinner=wId;renderSupContent()}
-function autoBW(ri,mId){const m=getBM(ri,mId);if(!m)return;const s=collectBS(ri,mId,m.editSets||[{a:0,b:0},{a:0,b:0}],m.editSet3Mode);m.editSets=s;let wa=0,wb=0;s.forEach(x=>{if(x.a>x.b)wa++;else if(x.b>x.a)wb++});if(wa>wb)m.editWinner=m.teamA?.id;else if(wb>wa)m.editWinner=m.teamB?.id;renderSupContent()}
+function setBSet3Mode(ri,mId,mode){const m=getBM(ri,mId);if(!m)return;m.editSets=collectBS(ri,mId,m.editSets||[],m.editSet3Mode);m.schedule=getSchVal(mId,`b${ri}`)||m.schedule;m.editSet3Mode=mode;renderSupContent()}
+function addBS(ri,mId){const m=getBM(ri,mId);if(!m)return;m.editSets=collectBS(ri,mId,m.editSets||[],m.editSet3Mode);m.schedule=getSchVal(mId,`b${ri}`)||m.schedule;m.editSets.push({a:'',b:''});renderSupContent()}
+function rmBS(ri,mId,i){const m=getBM(ri,mId);if(!m)return;m.editSets=collectBS(ri,mId,m.editSets||[],m.editSet3Mode);m.schedule=getSchVal(mId,`b${ri}`)||m.schedule;m.editSets.splice(i,1);renderSupContent()}
+function setBW(ri,mId,wId){const m=getBM(ri,mId);if(!m)return;m.editSets=collectBS(ri,mId,m.editSets||[],m.editSet3Mode);m.schedule=getSchVal(mId,`b${ri}`)||m.schedule;m.editWinner=wId;renderSupContent()}
+function autoBW(ri,mId){const m=getBM(ri,mId);if(!m)return;const s=collectBS(ri,mId,m.editSets||[{a:0,b:0},{a:0,b:0}],m.editSet3Mode);m.editSets=s;m.schedule=getSchVal(mId,`b${ri}`)||m.schedule;let wa=0,wb=0;s.forEach(x=>{if(x.a>x.b)wa++;else if(x.b>x.a)wb++});if(wa>wb)m.editWinner=m.teamA?.id;else if(wb>wa)m.editWinner=m.teamB?.id;renderSupContent()}
 async function saveBM(ri,mId){
   const m=getBM(ri,mId);if(!m)return;
   const sets=collectBS(ri,mId,m.editSets||[],m.editSet3Mode).filter(s=>s.a||s.b);
