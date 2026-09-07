@@ -2563,8 +2563,12 @@ function renderConfig(){
       </div>
     </div>
     <div class="card"><div class="card-title">💾 Backup de datos</div>
-      <p style="color:var(--text2);font-size:13px;line-height:1.6;margin-bottom:14px">Descargá una copia de seguridad de todos los datos (parejas, zonas, resultados, cuadro). Guardá el archivo por las dudas, sobre todo antes de cambios importantes.</p>
+      <p style="color:var(--text2);font-size:13px;line-height:1.6;margin-bottom:14px">Descargá una copia de seguridad de todos los datos (parejas, zonas, resultados, cuadro, horarios). Es un archivo .json — no lo abras ni lo edites, solo guardalo. Te conviene descargar uno nuevo de vez en cuando durante el torneo (por ejemplo, después de cargar varios resultados).</p>
       <button class="btn btn-primary" onclick="exportBackup()">⬇️ Descargar backup</button>
+      <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+        <p style="color:var(--text2);font-size:13px;line-height:1.6;margin-bottom:10px">Si en algún momento algo sale mal y necesitás volver a levantar el torneo desde un backup que hayas descargado, subilo acá. <strong>Ojo:</strong> esto reemplaza TODO lo que esté cargado ahora mismo por lo que diga el archivo.</p>
+        <label class="btn btn-secondary" style="cursor:pointer">📤 Restaurar desde backup<input type="file" accept="application/json,.json" style="display:none" onchange="restoreBackup(this)"/></label>
+      </div>
     </div>
   </div>`;
 }
@@ -2578,6 +2582,36 @@ function exportBackup(){
     setTimeout(()=>URL.revokeObjectURL(url),1500);
     toast('✓ Backup descargado');
   }catch(e){toast('⚠️ No se pudo generar el backup',3500)}
+}
+function restoreBackup(input){
+  const file=input&&input.files&&input.files[0];
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=(ev)=>{
+    input.value='';
+    let parsed=null;
+    try{parsed=JSON.parse(ev.target.result)}catch(err){toast('⚠️ Ese archivo no es un backup válido (no es un .json legible).',4500);return}
+    const looksValid=parsed&&typeof parsed==='object'&&(Array.isArray(parsed.pairs)||Array.isArray(parsed.tournaments));
+    if(!looksValid){toast('⚠️ Ese archivo no parece ser un backup de este torneo.',4500);return}
+    showConfirm(
+      '⚠️ RESTAURAR BACKUP',
+      'Esto va a reemplazar TODOS los datos actuales (parejas, zonas, resultados, cuadro, horarios) por los que tiene el archivo. Lo que esté cargado ahora y no esté en ese backup se pierde. Esta acción no se puede deshacer. ¿Confirmás que querés restaurar este backup?',
+      'var(--accent3)','Sí, restaurar',
+      async()=>{
+        if(!_isAdmin){toast('Iniciá sesión para restaurar');return}
+        applyState(parsed);
+        // Un restore es una decisión explícita y confirmada por el supervisor de
+        // pisar el estado actual con el del backup, así que no lo bloqueamos con el
+        // control de "alguien guardó algo más nuevo" (ver save()): es justamente
+        // para el caso en que algo se rompió y hay que volver atrás a propósito.
+        _lastKnownRev=null;
+        const ok=await save();
+        renderSupContent();
+        toast(ok?'✓ Backup restaurado':'⚠️ No se pudo guardar el backup restaurado. Probá de nuevo.',4000);
+      }
+    );
+  };
+  reader.readAsText(file);
 }
 
 // ═══════════════════════════════════
