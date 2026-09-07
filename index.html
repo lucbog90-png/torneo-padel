@@ -469,6 +469,11 @@ const ROW_KEY = (CLUB_ID===DEFAULT_CLUB) ? 'estado' : ('club_'+CLUB_ID);
 // Cliente Supabase (auth + datos + storage)
 const sbc = window.supabase.createClient(SB_URL, SB_KEY);
 let _isAdmin = false;   // true cuando hay sesión de administrador
+// _lastKnownRev guarda la "versión" de los datos que esta pestaña vio por última vez
+// (del servidor). Sirve para detectar si otro dispositivo/pestaña guardó cambios más
+// nuevos mientras esta pestaña estaba abierta, y así evitar pisarlos sin darse cuenta
+// (ver save() más abajo).
+let _lastKnownRev = null;
 
 // ═══════════════════════════════════
 // DATA LAYER (Supabase + backup local)
@@ -582,16 +587,31 @@ function syncT(){
 
 async function save(){
   if(!_isAdmin){toast('Iniciá sesión para guardar');return}
+  // Antes de guardar, nos fijamos si en el servidor hay una versión más nueva que la
+  // última que vimos en esta pestaña (por ejemplo, porque alguien guardó desde otro
+  // celular/computadora mientras esta pestaña estaba abierta y desactualizada). Si es
+  // así, NO pisamos esos datos: avisamos y frenamos, para no borrar resultados/horarios
+  // que ya se habían guardado bien desde otro lado.
+  let serverRevCheck=null;
+  try{serverRevCheck=await sbGet()}catch(e){serverRevCheck=null}
+  if(serverRevCheck&&serverRevCheck._rev&&_lastKnownRev&&serverRevCheck._rev!==_lastKnownRev){
+    toast('⚠️ Alguien guardó cambios más nuevos desde otro dispositivo. Recargá la página (actualizar) antes de seguir, para no perder esos datos.',7000);
+    return false;
+  }
   syncT();
+  const nextRev=(serverRevCheck&&serverRevCheck._rev?serverRevCheck._rev:(_lastKnownRev||0))+1;
   const data={
     name:S.name,sponsors:S.sponsors,
     logoDataUrl:S.logoDataUrl,adDataUrl:S.adDataUrl,bgDataUrl:S.bgDataUrl,
     tournaments:S.tournaments,activeT:S.activeT,
     category:S.category,description:S.description,pairs:S.pairs,zones:S.zones,bracket:S.bracket,started:S.started,bracketBuilt:S.bracketBuilt,
-    liga:S.liga,info:S.info,novedades:S.novedades,lives:S.lives
+    liga:S.liga,info:S.info,novedades:S.novedades,lives:S.lives,
+    _rev:nextRev
   };
   try{localStorage.setItem('padel_backup_'+ROW_KEY,JSON.stringify(data))}catch(e){}
-  await sbUpsert(data);
+  const ok=await sbUpsert(data);
+  if(ok)_lastKnownRev=nextRev;
+  return ok;
 }
 async function addLive(){
   const inp=document.getElementById('newLiveLabel');
@@ -621,6 +641,7 @@ async function toggleLive(id,on){
 
 function applyState(d){
   if(!d)return;
+  _lastKnownRev=d._rev||_lastKnownRev||null;
   S.name=d.name||S.name;S.sponsors=d.sponsors||[];
   S.logoDataUrl=d.logoDataUrl||null;S.adDataUrl=d.adDataUrl||null;S.bgDataUrl=d.bgDataUrl||null;
   S.liga=d.liga||{categories:[]};migrateLiga();
@@ -728,7 +749,22 @@ function stopRefresh(){if(_refreshInterval){clearInterval(_refreshInterval);_ref
 // UTILS
 // ═══════════════════════════════════
 let _tt;
-function toast(m,d){const e=document.getElementById('toast');e.textContent=m;e.style.display='block';clearTimeout(_tt);_tt=setTimeout(()=>e.style.display='none',d||2800)}
+let _toastPriorityUntil=0;
+// Los avisos que empiezan con ⚠️ son importantes (por ej. "no se pudo guardar" o el
+// aviso de conflicto de guardado) y quedan un rato "protegidos": si justo después se
+// llama a toast() de nuevo con un mensaje normal (como el típico "✓ Guardado" que
+// disparan casi todas las acciones), ese mensaje se ignora en vez de taparlo, para que
+// el supervisor realmente vea el aviso importante en vez de un falso "guardado bien".
+function toast(m,d){
+  const isWarning=m&&m.indexOf('⚠️')===0;
+  const now=Date.now();
+  if(!isWarning&&now<_toastPriorityUntil)return;
+  const e=document.getElementById('toast');e.textContent=m;e.style.display='block';
+  clearTimeout(_tt);
+  const dur=d||2800;
+  if(isWarning)_toastPriorityUntil=now+dur;
+  _tt=setTimeout(()=>e.style.display='none',dur);
+}
 function uid(){return Math.random().toString(36).slice(2)+Date.now().toString(36)}
 function esc(s){return s?String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'):''}
 function shuffle(a){const r=[...a];for(let i=r.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[r[i],r[j]]=[r[j],r[i]];}return r}
