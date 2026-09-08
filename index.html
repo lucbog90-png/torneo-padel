@@ -513,6 +513,7 @@ function setSyncDot(state){
 const S={
   name:'Torneo de Pádel',category:'',description:'',
   pairs:[],zones:[],bracket:[],sponsors:[],
+  clubPlayers:[],
   started:false,bracketBuilt:false,
   logoDataUrl:null,adDataUrl:null,bgDataUrl:null,  // ahora guardan URLs de Storage
   currentPTab:'zonas',currentSTab:'torneo',currentPMode:'torneo',
@@ -601,7 +602,7 @@ async function save(){
   syncT();
   const nextRev=(serverRevCheck&&serverRevCheck._rev?serverRevCheck._rev:(_lastKnownRev||0))+1;
   const data={
-    name:S.name,sponsors:S.sponsors,
+    name:S.name,sponsors:S.sponsors,clubPlayers:S.clubPlayers,
     logoDataUrl:S.logoDataUrl,adDataUrl:S.adDataUrl,bgDataUrl:S.bgDataUrl,
     tournaments:S.tournaments,activeT:S.activeT,
     category:S.category,description:S.description,pairs:S.pairs,zones:S.zones,bracket:S.bracket,started:S.started,bracketBuilt:S.bracketBuilt,
@@ -643,6 +644,7 @@ function applyState(d){
   if(!d)return;
   _lastKnownRev=d._rev||_lastKnownRev||null;
   S.name=d.name||S.name;S.sponsors=d.sponsors||[];
+  S.clubPlayers=Array.isArray(d.clubPlayers)?d.clubPlayers:[];
   S.logoDataUrl=d.logoDataUrl||null;S.adDataUrl=d.adDataUrl||null;S.bgDataUrl=d.bgDataUrl||null;
   S.liga=d.liga||{categories:[]};migrateLiga();
   S.info=d.info||{contacts:[],reglamentoUrl:'',reglamentoName:'',locations:[]};migrateInfo();
@@ -1334,6 +1336,53 @@ function renderSponsors(){
 const DIAS=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
 const DIAS_SUP=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
 const DIA_ABBR={'Lunes':'Lun','Martes':'Mar','Miércoles':'Mié','Jueves':'Jue','Viernes':'Vie','Sábado':'Sáb','Domingo':'Dom'};
+
+// ═══════════════════════════════════
+// JUGADORES DEL CLUB (lista de buena fe)
+// ═══════════════════════════════════
+// Lista única de jugadores del club (no es por torneo): cada uno con nombre,
+// apellido, categoría, género y WhatsApp opcional. Al inscribir una pareja en
+// un torneo, los jugadores se eligen de acá en vez de escribirse a mano, para
+// evitar duplicados/typos y tener una única fuente de verdad.
+const CLUB_CATEGORIES=['1era','2da','3era','4ta','5ta','6ta','7ma','8va'];
+const CLUB_GENDERS=['Caballeros','Damas'];
+let _editingCpId=null; // id del jugador que se está editando en la lista (estado de pantalla, no se guarda)
+function toggleEditClubPlayer(id){_editingCpId=(_editingCpId===id)?null:id;renderSupContent()}
+function clubPlayerName(p){return p?`${p.firstName} ${p.lastName}`.trim():''}
+function clubPlayerLabel(p){return p?`${clubPlayerName(p)} — ${p.category} ${p.gender}`:''}
+function getClubPlayer(id){return (S.clubPlayers||[]).find(p=>p.id===id)}
+// Jugadores del club que todavía NO están anotados en ninguna pareja de este
+// torneo (para no poder inscribir dos veces al mismo jugador).
+function availableClubPlayers(excludeIds){
+  const excl=new Set(excludeIds||[]);
+  const usedIds=new Set();
+  S.pairs.forEach(p=>{if(p.aId)usedIds.add(p.aId);if(p.bId)usedIds.add(p.bId)});
+  return (S.clubPlayers||[])
+    .filter(p=>(!usedIds.has(p.id)||excl.has(p.id)))
+    .sort((a,b)=>(a.lastName+a.firstName).localeCompare(b.lastName+b.firstName,'es'));
+}
+async function addClubPlayer(){
+  const fn=document.getElementById('newCpFirst'),ln=document.getElementById('newCpLast'),gEl=document.getElementById('newCpGender'),cEl=document.getElementById('newCpCategory'),waEl=document.getElementById('newCpWhatsapp');
+  const firstName=(fn?.value||'').trim(),lastName=(ln?.value||'').trim(),gender=gEl?.value||CLUB_GENDERS[0],category=cEl?.value||CLUB_CATEGORIES[0],whatsapp=(waEl?.value||'').trim();
+  if(!firstName||!lastName){toast('Completá nombre y apellido');return}
+  S.clubPlayers=S.clubPlayers||[];
+  const dup=S.clubPlayers.some(p=>p.firstName.toLowerCase().trim()===firstName.toLowerCase()&&p.lastName.toLowerCase().trim()===lastName.toLowerCase());
+  if(dup){toast('⚠️ Ya hay un jugador cargado con ese nombre y apellido',3500);return}
+  S.clubPlayers.push({id:uid(),firstName,lastName,gender,category,whatsapp});
+  await save();renderSupContent();toast('✓ Jugador agregado a la lista');
+}
+async function removeClubPlayer(id){
+  S.clubPlayers=(S.clubPlayers||[]).filter(p=>p.id!==id);
+  await save();renderSupContent();toast('Jugador quitado de la lista');
+}
+async function saveClubPlayerEdit(id){
+  const p=getClubPlayer(id);if(!p)return;
+  const fn=document.getElementById('cp_fn_'+id),ln=document.getElementById('cp_ln_'+id),gEl=document.getElementById('cp_g_'+id),cEl=document.getElementById('cp_c_'+id),waEl=document.getElementById('cp_wa_'+id);
+  const firstName=(fn?.value||'').trim(),lastName=(ln?.value||'').trim();
+  if(!firstName||!lastName){toast('Completá nombre y apellido');return}
+  p.firstName=firstName;p.lastName=lastName;p.gender=gEl?.value||p.gender;p.category=cEl?.value||p.category;p.whatsapp=(waEl?.value||'').trim();
+  await save();renderSupContent();toast('✓ Jugador actualizado');
+}
 async function setZoneDay(zId,day){
   const z=getZone(zId);if(!z)return;
   z.playDay=day||null;
@@ -1379,14 +1428,17 @@ function renderInscripcion(){
     ${!S.started?`<td style="white-space:nowrap"><button class="btn btn-secondary btn-sm" onclick="openEditPairInsc('${p.id}')">✏️</button> <button class="btn btn-danger btn-sm" onclick="removePair('${p.id}')">✕</button></td>`:'<td></td>'}
   </tr>`).join('');
   const dayChips=DIAS.map(d=>`<label class="day-chip"><input type="checkbox" id="day_${d}"/> ${d}</label>`).join('');
+  const cpOptions=availableClubPlayers();
+  const cpSelect=id=>`<select id="${id}"><option value="">— Elegir jugador —</option>${cpOptions.map(p=>`<option value="${p.id}">${esc(clubPlayerLabel(p))}</option>`).join('')}</select>`;
   const form=S.started
     ?`<div style="display:flex;align-items:center;gap:10px"><span style="font-size:20px">⚡</span><div><div style="color:var(--accent2);font-size:15px;font-weight:700">Torneo en curso</div><div style="color:var(--text2);font-size:12px">${S.pairs.length} parejas · ${S.zones.length} zonas</div></div></div>`
+    :!cpOptions.length
+    ?`<p style="color:var(--text2);font-size:13px;line-height:1.6">Todavía no hay jugadores disponibles para inscribir. Primero cargalos en <strong>Configuración → Jugadores del club</strong> (nombre, categoría y género de cada uno) — de ahí se eligen para armar las parejas.</p>`
     :`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px">
-        <div class="ig"><label>Jugador 1</label><input id="p1a" list="ligaPlayersList" placeholder="Nombre" onkeydown="if(event.key==='Enter')addPair()"/></div>
-        <div class="ig"><label>Jugador 2</label><input id="p1b" list="ligaPlayersList" placeholder="Nombre" onkeydown="if(event.key==='Enter')addPair()"/></div>
+        <div class="ig"><label>Jugador 1</label>${cpSelect('p1a')}</div>
+        <div class="ig"><label>Jugador 2</label>${cpSelect('p1b')}</div>
       </div>
-      ${ligaPlayerNames().length?`<p style="color:var(--text2);font-size:11px;margin-bottom:10px">💡 Si el jugador ya juega en la Liga, aparece sugerido mientras escribís (así no se duplica en el ranking).</p>`:''}
-      ${ligaDatalist('ligaPlayersList')}
+      <p style="color:var(--text2);font-size:11px;margin-bottom:10px">💡 ¿No está el jugador que buscás? Agregalo en <strong>Configuración → Jugadores del club</strong> y va a aparecer acá.</p>
       <div style="margin-bottom:12px"><span class="day-field-label">Días que pueden jugar (elegí 2)</span>
         <div style="display:flex;gap:8px;flex-wrap:wrap">${dayChips}</div>
       </div>
@@ -1403,12 +1455,18 @@ function renderInscripcion(){
     :`<table><thead><tr><th>#</th><th>Pareja</th><th>Días</th><th>Estado</th><th></th></tr></thead><tbody>${rows}</tbody></table>`}</div>`;
 }
 async function addPair(){
-  const a=document.getElementById('p1a').value.trim(),b=document.getElementById('p1b').value.trim();
-  if(!a||!b){toast('Completá ambos jugadores');return}
+  const aId=document.getElementById('p1a')?.value||'',bId=document.getElementById('p1b')?.value||'';
+  if(!aId||!bId){toast('Elegí ambos jugadores');return}
+  if(aId===bId){toast('Elegí dos jugadores distintos');return}
+  const pa=getClubPlayer(aId),pb=getClubPlayer(bId);
+  if(!pa||!pb){toast('⚠️ Alguno de esos jugadores ya no está en la lista del club. Recargá la página e intentá de nuevo.',4000);return}
+  const usedIds=new Set();S.pairs.forEach(p=>{if(p.aId)usedIds.add(p.aId);if(p.bId)usedIds.add(p.bId)});
+  if(usedIds.has(aId)||usedIds.has(bId)){toast('⚠️ Ese jugador ya está inscrito en otra pareja de este torneo',4000);return}
   const days=DIAS.filter(d=>document.getElementById('day_'+d)?.checked);
   if(days.length!==2){toast('Elegí exactamente 2 días de juego');return}
   if(S.pairs.length>=48){toast('Máximo 48 parejas');return}
-  S.pairs.push({id:uid(),a,b,days});await save();toast('✓ Pareja inscrita');renderSupContent();
+  S.pairs.push({id:uid(),a:clubPlayerName(pa),b:clubPlayerName(pb),aId:pa.id,bId:pb.id,days});
+  await save();toast('✓ Pareja inscrita');renderSupContent();
 }
 async function removePair(id){S.pairs=S.pairs.filter(p=>p.id!==id);await save();renderSupContent()}
 function confirmStart(){
@@ -2490,6 +2548,41 @@ async function loadVisitStats(){
     boxT.textContent='—';boxA.textContent='—';
   }
 }
+function renderClubPlayersCard(){
+  const players=[...(S.clubPlayers||[])].sort((a,b)=>(a.lastName+a.firstName).localeCompare(b.lastName+b.firstName,'es'));
+  const rows=players.map(p=>{
+    if(_editingCpId===p.id){
+      return`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;padding:8px 10px;border:1px solid var(--accent);border-radius:8px;margin-bottom:6px;background:rgba(0,229,160,.05)">
+        <div class="ig" style="flex:1;min-width:110px;margin-bottom:0"><label style="font-size:11px">Nombre</label><input id="cp_fn_${p.id}" value="${esc(p.firstName)}"/></div>
+        <div class="ig" style="flex:1;min-width:110px;margin-bottom:0"><label style="font-size:11px">Apellido</label><input id="cp_ln_${p.id}" value="${esc(p.lastName)}"/></div>
+        <div class="ig" style="min-width:120px;margin-bottom:0"><label style="font-size:11px">Género</label><select id="cp_g_${p.id}">${CLUB_GENDERS.map(g=>`<option value="${g}" ${p.gender===g?'selected':''}>${g}</option>`).join('')}</select></div>
+        <div class="ig" style="min-width:110px;margin-bottom:0"><label style="font-size:11px">Categoría</label><select id="cp_c_${p.id}">${CLUB_CATEGORIES.map(c=>`<option value="${c}" ${p.category===c?'selected':''}>${c}</option>`).join('')}</select></div>
+        <div class="ig" style="flex:1;min-width:150px;margin-bottom:0"><label style="font-size:11px">WhatsApp (opcional)</label><input id="cp_wa_${p.id}" value="${esc(p.whatsapp||'')}" placeholder="549 3562525011"/></div>
+        <button class="btn btn-primary btn-sm" onclick="saveClubPlayerEdit('${p.id}')">💾 Guardar</button>
+        <button class="btn btn-secondary btn-sm" onclick="toggleEditClubPlayer('${p.id}')">Cancelar</button>
+      </div>`;
+    }
+    return`<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;flex-wrap:wrap">
+      <span style="flex:1;min-width:140px;font-weight:600;font-size:13px">${esc(clubPlayerName(p))}</span>
+      <span class="badge badge-blue">${esc(p.category)} · ${esc(p.gender)}</span>
+      ${p.whatsapp?`<span style="font-size:12px;color:var(--text2)">📱 ${esc(p.whatsapp)}</span>`:''}
+      <button class="btn btn-secondary btn-sm" onclick="toggleEditClubPlayer('${p.id}')">✏️</button>
+      <button class="btn btn-danger btn-sm" onclick="removeClubPlayer('${p.id}')">✕</button>
+    </div>`;
+  }).join('');
+  return`<div class="card"><div class="card-title">👥 Jugadores del club (lista de buena fe)</div>
+    <p style="color:var(--text2);font-size:13px;margin-bottom:14px">Cargá acá a todos los jugadores del club una sola vez. Al inscribir parejas en un torneo (pestaña Inscripción), se eligen de esta lista en vez de escribirse a mano — así no hay duplicados ni nombres mal escritos.</p>
+    ${players.length?rows:`<p style="color:var(--text2);font-size:13px;margin-bottom:10px">Todavía no cargaste ningún jugador.</p>`}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+      <div class="ig" style="flex:1;min-width:110px;margin-bottom:0"><label style="font-size:11px">Nombre</label><input id="newCpFirst" placeholder="Ej: Juan"/></div>
+      <div class="ig" style="flex:1;min-width:110px;margin-bottom:0"><label style="font-size:11px">Apellido</label><input id="newCpLast" placeholder="Ej: Pérez"/></div>
+      <div class="ig" style="min-width:120px;margin-bottom:0"><label style="font-size:11px">Género</label><select id="newCpGender">${CLUB_GENDERS.map(g=>`<option value="${g}">${g}</option>`).join('')}</select></div>
+      <div class="ig" style="min-width:110px;margin-bottom:0"><label style="font-size:11px">Categoría</label><select id="newCpCategory">${CLUB_CATEGORIES.map(c=>`<option value="${c}">${c}</option>`).join('')}</select></div>
+      <div class="ig" style="flex:1;min-width:150px;margin-bottom:0"><label style="font-size:11px">WhatsApp (opcional)</label><input id="newCpWhatsapp" placeholder="549 3562525011"/></div>
+      <button class="btn btn-primary btn-sm" onclick="addClubPlayer()">+ Agregar</button>
+    </div>
+  </div>`;
+}
 function renderConfig(){
   setTimeout(loadVisitStats,80);
   migrateInfo();
@@ -2504,6 +2597,7 @@ function renderConfig(){
       <button class="btn btn-danger btn-sm" onclick="removeContact(${i})">✕</button>
     </div>`).join('');
   return`<div class="grid2">
+    ${renderClubPlayersCard()}
     <div class="card"><div class="card-title">ℹ️ Información para jugadores</div>
       <p style="color:var(--text2);font-size:13px;margin-bottom:14px">Se muestra en la pestaña "Información" que ven los jugadores, para todos tus torneos.</p>
       <div class="ig"><label>📞 Contactos (podés cargar más de uno)</label>
