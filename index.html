@@ -1397,9 +1397,12 @@ function normalizeWhatsappAR(raw){
   let d=(raw||'').replace(/\D/g,'');
   if(!d)return'';
   d=d.replace(/^0+/,''); // sacar el 0 de larga distancia si quedó cargado
-  if(!d.startsWith('54'))d='549'+d;
-  else if(!d.startsWith('549'))d='549'+d.slice(2); // faltaba el 9 de WhatsApp
-  return d;
+  if(d.startsWith('549'))d=d.slice(3);
+  else if(d.startsWith('54'))d=d.slice(2); // dejamos "d" como el número nacional (código de área + local, 10 dígitos)
+  // formato viejo con el "15" pegado después del código de área (ej: 3562 15 525011)
+  const m=d.match(/^(\d{2,4})15(\d{6,8})$/);
+  if(m&&(m[1].length+m[2].length)===10)d=m[1]+m[2];
+  return '549'+d;
 }
 function matchRivalName(team){return team?`${team.a} / ${team.b}`:'rival a definir'}
 // Recorre zonas y llaves y arma una fila por CADA jugador de cada partido que
