@@ -298,6 +298,7 @@ tr:last-child td{border-bottom:none}
     <button class="nav-btn" id="snav-bracket" onclick="showSTab('bracket')" disabled>Draws</button>
     <button class="nav-btn" id="snav-liga" onclick="showSTab('liga')">🏅 Liga</button>
     <button class="nav-btn" id="snav-novedades" onclick="showSTab('novedades')">📰 Novedades</button>
+    <button class="nav-btn" id="snav-avisos" onclick="showSTab('avisos')">📲 Avisos</button>
     <button class="nav-btn" id="snav-config" onclick="showSTab('config')">Config.</button>
   </nav>
   <main class="app-main" id="supContent"></main>
@@ -1094,7 +1095,7 @@ function renderPlayerContent(){
 }
 function renderSupContent(){
   const c=document.getElementById('supContent');
-  const m={torneo:renderSupTorneo,inscripcion:renderInscripcion,resultados:renderSupResultados,bracket:renderBracketTabSup,liga:renderSupLiga,novedades:renderSupNovedades,config:renderConfig};
+  const m={torneo:renderSupTorneo,inscripcion:renderInscripcion,resultados:renderSupResultados,bracket:renderBracketTabSup,liga:renderSupLiga,novedades:renderSupNovedades,avisos:renderSupAvisos,config:renderConfig};
   c.innerHTML=(m[S.currentSTab]||renderSupTorneo)();
 }
 // ═══════════════════════════════════
@@ -1382,6 +1383,75 @@ async function saveClubPlayerEdit(id){
   if(!firstName||!lastName){toast('Completá nombre y apellido');return}
   p.firstName=firstName;p.lastName=lastName;p.gender=gEl?.value||p.gender;p.category=cEl?.value||p.category;p.whatsapp=(waEl?.value||'').trim();
   await save();renderSupContent();toast('✓ Jugador actualizado');
+}
+
+// ═══════════════════════════════════
+// AVISOS POR WHATSAPP (semi-automático)
+// ═══════════════════════════════════
+// No mandamos el mensaje solos (eso requiere la API oficial de WhatsApp, que
+// tiene costo por mensaje y trámites de verificación). En cambio armamos, para
+// cada jugador con horario de partido cargado, un link de WhatsApp con el
+// mensaje ya redactado: el supervisor solo tiene que tocar el botón y confirmar
+// el envío desde su propio WhatsApp.
+function normalizeWhatsappAR(raw){
+  let d=(raw||'').replace(/\D/g,'');
+  if(!d)return'';
+  d=d.replace(/^0+/,''); // sacar el 0 de larga distancia si quedó cargado
+  if(!d.startsWith('54'))d='549'+d;
+  else if(!d.startsWith('549'))d='549'+d.slice(2); // faltaba el 9 de WhatsApp
+  return d;
+}
+function matchRivalName(team){return team?`${team.a} / ${team.b}`:'rival a definir'}
+// Recorre zonas y llaves y arma una fila por CADA jugador de cada partido que
+// ya tiene día y horario cargado, todavía no jugado, con los dos equipos ya
+// definidos (para no avisar antes de saber el rival).
+function collectReminders(){
+  const items=[];
+  const pushForMatch=(m,ctx)=>{
+    if(!m||m.status==='done')return;
+    if(!m.schedule||!m.schedule.day||!m.schedule.time)return;
+    if(!m.teamA||!m.teamB||!m.teamA.id||!m.teamB.id)return;
+    [[m.teamA,m.teamB],[m.teamB,m.teamA]].forEach(([team,rival])=>{
+      ['aId','bId'].forEach(idField=>{
+        const pid=team[idField];if(!pid)return;
+        const cp=getClubPlayer(pid);if(!cp)return;
+        items.push({playerId:cp.id,playerName:clubPlayerName(cp),firstName:cp.firstName,whatsapp:cp.whatsapp||'',
+          matchId:m.id,ctx,day:m.schedule.day,time:m.schedule.time,court:m.schedule.court||'',rival:matchRivalName(rival)});
+      });
+    });
+  };
+  (S.zones||[]).forEach(z=>(z.matches||[]).forEach(m=>pushForMatch(m,`Zona ${z.letter}`)));
+  (S.bracket||[]).forEach(rd=>(rd.matches||[]).forEach(m=>pushForMatch(m,rd.name||'Llave')));
+  const dOrder=d=>{const i=DIAS_SUP.indexOf(d);return i<0?99:i};
+  items.sort((x,y)=>dOrder(x.day)-dOrder(y.day)||(x.time||'').localeCompare(y.time||'')||x.playerName.localeCompare(y.playerName,'es'));
+  return items;
+}
+function reminderMessage(x){
+  return `Hola ${x.firstName}! 🎾 Te recordamos tu partido (${x.ctx}): ${x.day} a las ${x.time} hs${x.court?', cancha '+x.court:''}. Rival: ${x.rival}. ¡Suerte!`;
+}
+function renderSupAvisos(){
+  const items=collectReminders();
+  const intro=`<div class="card" style="padding:14px;margin-bottom:14px">
+    <div class="card-title">📲 Avisos por WhatsApp</div>
+    <p style="color:var(--text2);font-size:13px;margin:0">Estos son los próximos partidos con día y horario cargado. Tocá el botón para abrir WhatsApp con el mensaje ya escrito, listo para mandarle a cada jugador. Para que aparezca el botón, el jugador tiene que tener WhatsApp cargado en "Jugadores del club" (Configuración).</p>
+  </div>`;
+  if(!items.length)return intro+`<div class="empty"><div class="ei">📲</div><p>Todavía no hay partidos con día y horario cargado.</p></div>`;
+  const withWa=items.filter(x=>x.whatsapp),withoutWa=items.filter(x=>!x.whatsapp);
+  const rows=withWa.map(x=>{
+    const link=`https://wa.me/${normalizeWhatsappAR(x.whatsapp)}?text=${encodeURIComponent(reminderMessage(x))}`;
+    return `<div class="sup-match" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+      <div>
+        <div style="font-weight:700">${esc(x.playerName)}</div>
+        <div style="font-size:12px;color:var(--text2)">${esc(x.ctx)} · 📆 ${esc(x.day)} · 🕐 ${esc(x.time)}${x.court?' · 🏟️ '+esc(x.court):''} · vs ${esc(x.rival)}</div>
+      </div>
+      <a class="btn btn-primary btn-sm" href="${link}" target="_blank" rel="noopener">📲 Avisar por WhatsApp</a>
+    </div>`;
+  }).join('');
+  const missingNames=[...new Set(withoutWa.map(x=>x.playerName))];
+  const missing=missingNames.length?`<div class="card" style="padding:14px;margin-top:14px">
+    <div style="font-size:12px;color:var(--text2)">Tienen partido con horario pero no tienen WhatsApp cargado, así que no se pudo armar el link: ${esc(missingNames.join(', '))}</div>
+  </div>`:'';
+  return intro+rows+missing;
 }
 async function setZoneDay(zId,day){
   const z=getZone(zId);if(!z)return;
