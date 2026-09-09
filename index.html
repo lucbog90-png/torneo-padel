@@ -1350,6 +1350,11 @@ const CLUB_GENDERS=['Caballeros','Damas'];
 let _editingCpId=null; // id del jugador que se está editando en la lista (estado de pantalla, no se guarda)
 function toggleEditClubPlayer(id){_editingCpId=(_editingCpId===id)?null:id;renderSupContent()}
 function clubPlayerName(p){return p?`${p.firstName} ${p.lastName}`.trim():''}
+// Normaliza un nombre para comparar identidad de jugador de Liga sin importar
+// mayúsculas/minúsculas, espacios de más, ni el ORDEN en que se escribieron
+// nombre y apellido (ej: "Almaraz Soledad" debe reconocerse como la misma
+// persona que "Soledad Almaraz"). Se usa SOLO para comparar, nunca para mostrar.
+function normName(s){return String(s||'').toLowerCase().trim().split(/\s+/).filter(Boolean).sort().join(' ')}
 function clubPlayerLabel(p){return p?`${clubPlayerName(p)} — ${p.category} ${p.gender}`:''}
 function getClubPlayer(id){return (S.clubPlayers||[]).find(p=>p.id===id)}
 // Jugadores del club que todavía NO están anotados en ninguna pareja de este
@@ -1484,8 +1489,8 @@ function ligaDatalist(id){
 }
 function ligaAvailablePlayerNames(){
   const registered=new Set();
-  S.pairs.forEach(p=>{registered.add(String(p.a).toLowerCase().trim());registered.add(String(p.b).toLowerCase().trim());});
-  return ligaPlayerNames().filter(n=>!registered.has(n.toLowerCase().trim()));
+  S.pairs.forEach(p=>{registered.add(normName(p.a));registered.add(normName(p.b));});
+  return ligaPlayerNames().filter(n=>!registered.has(normName(n)));
 }
 function ligaAvailableDatalist(id){
   const names=ligaAvailablePlayerNames();
@@ -1568,7 +1573,7 @@ function partitionZones(n){
 function pairLigaPoints(p,catId){
   if(!catId||!S.liga||!S.liga.categories)return 0;
   const cat=S.liga.categories.find(c=>c.id===catId);if(!cat)return 0;
-  const find=name=>{const pl=cat.players.find(x=>x.name.toLowerCase().trim()===String(name).toLowerCase().trim());return pl?pl.points:0};
+  const find=name=>{const pl=cat.players.find(x=>normName(x.name)===normName(name));return pl?pl.points:0};
   return find(p.a)+find(p.b);
 }
 async function startTournament(){
@@ -2342,7 +2347,7 @@ async function confirmLigaClose(){
   _ligaPreview.forEach(r=>{
     const st=computePairMatchStats(r.pairId);
     [r.a,r.b].forEach(name=>{
-      let pl=cat.players.find(p=>p.name.toLowerCase().trim()===String(name).toLowerCase().trim());
+      let pl=cat.players.find(p=>normName(p.name)===normName(name));
       if(!pl){pl={id:uid(),name:name,points:0,fechas:0,pj:0,pg:0,pp:0,sj:0,sg:0,sp:0,gj:0,gg:0,gp:0};cat.players.push(pl)}
       pl.points+=r.points;pl.fechas+=1;
       pl.pj=(pl.pj||0)+st.pj;pl.pg=(pl.pg||0)+st.pg;pl.pp=(pl.pp||0)+st.pp;
@@ -2854,7 +2859,7 @@ async function addLigaPlayer(catIdx){
   const inp=document.getElementById('ligaPlayerName');
   const name=(inp.value||'').trim();
   if(!name){toast('Escribí un nombre');return}
-  if(c.players.some(p=>p.name.toLowerCase().trim()===name.toLowerCase())){toast('Ese jugador ya está en la lista');return}
+  if(c.players.some(p=>normName(p.name)===normName(name))){toast('Ese jugador ya está en la lista');return}
   c.players.push({id:uid(),name,points:0,fechas:0});
   inp.value='';
   await save();renderSupContent();toast('✓ Jugador agregado');
