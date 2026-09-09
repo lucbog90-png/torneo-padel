@@ -1349,7 +1349,7 @@ const CLUB_CATEGORIES=['1era','2da','3era','4ta','5ta','6ta','7ma','8va'];
 const CLUB_GENDERS=['Caballeros','Damas'];
 let _editingCpId=null; // id del jugador que se está editando en la lista (estado de pantalla, no se guarda)
 function toggleEditClubPlayer(id){_editingCpId=(_editingCpId===id)?null:id;renderSupContent()}
-function clubPlayerName(p){return p?`${p.firstName} ${p.lastName}`.trim():''}
+function clubPlayerName(p){return p?`${p.lastName} ${p.firstName}`.trim():''}
 // Normaliza un nombre para comparar identidad de jugador de Liga sin importar
 // mayúsculas/minúsculas, espacios de más, ni el ORDEN en que se escribieron
 // nombre y apellido (ej: "Almaraz Soledad" debe reconocerse como la misma
