@@ -1857,19 +1857,28 @@ function renderSupResultados(){
 // ═══════════════════════════════════
 // EXPORT CSV
 // ═══════════════════════════════════
+// Excel/Sheets pueden llegar a interpretar como fórmula una celda que empieza
+// con =, +, - o @ (ej: un nombre cargado como "=HOY()"). Le anteponemos una
+// comilla simple a esas celdas para que siempre se traten como texto plano.
+function csvSafe(v){
+  const s=String(v==null?'':v);
+  return /^[=+\-@\t\r]/.test(s)?("'"+s):s;
+}
 function exportCSV(){
   const rows=[['Sección','Detalle','Pareja','G','P','Sets','Resultado']];
   S.zones.forEach(z=>z.standings.forEach((s,i)=>{
     rows.push([z.name,`${i+1}°${(i<3&&z.closed)?' (clasifica)':(z.closed?' (elim.)':'')}`,`${s.pair.a} / ${s.pair.b}`,s.wins,s.losses,`${s.sw}-${s.sl}`,'']);
   }));
   S.bracket.forEach(r=>r.matches.forEach(m=>{
-    if(m.isBye&&m.teamA){rows.push([r.name,'BYE',pairName(m.teamA),'','','','pasa']);return}
+    // Nombres "planos" (sin el escape de HTML de pairName(), que es para la pantalla, no para un CSV)
+    const nmA=m.teamA?`${m.teamA.a} / ${m.teamA.b}`:'',nmB=m.teamB?`${m.teamB.a} / ${m.teamB.b}`:'';
+    if(m.isBye&&m.teamA){rows.push([r.name,'BYE',nmA,'','','','pasa']);return}
     if(m.teamA&&m.teamB&&m.status==='done'){
-      const wn=m.winner===m.teamA.id?pairName(m.teamA):pairName(m.teamB);
-      rows.push([r.name,`${pairName(m.teamA)} vs ${pairName(m.teamB)}`,wn,'','',m.sets.map(s=>s.a+'-'+s.b).join(' ')||'W.O.','gana']);
+      const wn=m.winner===m.teamA.id?nmA:nmB;
+      rows.push([r.name,`${nmA} vs ${nmB}`,wn,'','',m.sets.map(s=>s.a+'-'+s.b).join(' ')||'W.O.','gana']);
     }
   }));
-  const csv=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const csv=rows.map(r=>r.map(c=>`"${csvSafe(c).replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`${S.name.replace(/\s+/g,'_')}_resultados.csv`;a.click();
   setTimeout(()=>URL.revokeObjectURL(a.href),1000);
