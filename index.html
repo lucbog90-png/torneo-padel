@@ -1357,6 +1357,35 @@ function clubPlayerName(p){return p?`${p.lastName} ${p.firstName}`.trim():''}
 function normName(s){return String(s||'').toLowerCase().trim().split(/\s+/).filter(Boolean).sort().join(' ')}
 function clubPlayerLabel(p){return p?`${clubPlayerName(p)} — ${p.category} ${p.gender}`:''}
 function getClubPlayer(id){return (S.clubPlayers||[]).find(p=>p.id===id)}
+// Filtro de categoría/género elegido en cada selector de jugador al inscribir
+// una pareja (p1a / p1b). Es memoria de sesión (no se guarda en S) para que
+// se mantenga elegido mientras se inscriben varias parejas seguidas.
+let _inscCatFilter={p1a:'',p1b:''};
+// Combinaciones categoría+género que realmente existen entre los jugadores
+// disponibles, para armar el selector de filtro (ej: "8va Damas").
+function clubPlayerCatOptions(list){
+  const combos=[];
+  CLUB_CATEGORIES.forEach(cat=>CLUB_GENDERS.forEach(g=>{
+    if(list.some(p=>p.category===cat&&p.gender===g))combos.push({value:cat+'|'+g,label:`${cat} ${g}`});
+  }));
+  return combos;
+}
+function filteredCpOptions(list,filterVal){
+  if(!filterVal)return list;
+  const [cat,g]=filterVal.split('|');
+  return list.filter(p=>p.category===cat&&p.gender===g);
+}
+// Repuebla el <select> de jugador de un slot (p1a/p1b) según el filtro de
+// categoría elegido, sin tocar el resto del formulario (días, canchas, el
+// otro jugador ya elegido).
+function filterCpSelect(slot){
+  const val=document.getElementById(slot+'Cat')?.value||'';
+  _inscCatFilter[slot]=val;
+  const filtered=filteredCpOptions(availableClubPlayers(),val);
+  const sel=document.getElementById(slot);
+  if(!sel)return;
+  sel.innerHTML=`<option value="">— Elegir jugador —</option>${filtered.map(p=>`<option value="${p.id}">${esc(clubPlayerLabel(p))}</option>`).join('')}`;
+}
 // Jugadores del club que todavía NO están anotados en ninguna pareja de este
 // torneo (para no poder inscribir dos veces al mismo jugador).
 function availableClubPlayers(excludeIds){
@@ -1507,15 +1536,25 @@ function renderInscripcion(){
   </tr>`).join('');
   const dayChips=DIAS.map(d=>`<label class="day-chip"><input type="checkbox" id="day_${d}"/> ${d}</label>`).join('');
   const cpOptions=availableClubPlayers();
-  const cpSelect=id=>`<select id="${id}"><option value="">— Elegir jugador —</option>${cpOptions.map(p=>`<option value="${p.id}">${esc(clubPlayerLabel(p))}</option>`).join('')}</select>`;
+  const catCombos=clubPlayerCatOptions(cpOptions);
+  const catSelect=slot=>`<select id="${slot}Cat" onchange="filterCpSelect('${slot}')"><option value="">— Todas las categorías —</option>${catCombos.map(c=>`<option value="${c.value}" ${_inscCatFilter[slot]===c.value?'selected':''}>${esc(c.label)}</option>`).join('')}</select>`;
+  const cpSelect=slot=>{
+    const filtered=filteredCpOptions(cpOptions,_inscCatFilter[slot]);
+    return `<select id="${slot}"><option value="">— Elegir jugador —</option>${filtered.map(p=>`<option value="${p.id}">${esc(clubPlayerLabel(p))}</option>`).join('')}</select>`;
+  };
   const form=S.started
     ?`<div style="display:flex;align-items:center;gap:10px"><span style="font-size:20px">⚡</span><div><div style="color:var(--accent2);font-size:15px;font-weight:700">Torneo en curso</div><div style="color:var(--text2);font-size:12px">${S.pairs.length} parejas · ${S.zones.length} zonas</div></div></div>`
     :!cpOptions.length
     ?`<p style="color:var(--text2);font-size:13px;line-height:1.6">Todavía no hay jugadores disponibles para inscribir. Primero cargalos en <strong>Configuración → Jugadores del club</strong> (nombre, categoría y género de cada uno) — de ahí se eligen para armar las parejas.</p>`
     :`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px">
-        <div class="ig"><label>Jugador 1</label>${cpSelect('p1a')}</div>
-        <div class="ig"><label>Jugador 2</label>${cpSelect('p1b')}</div>
+        <div class="ig" style="flex:1;min-width:150px">${catCombos.length>1?`<label>Categoría jugador 1</label>${catSelect('p1a')}`:''}</div>
+        <div class="ig" style="flex:1;min-width:150px"><label>Jugador 1</label>${cpSelect('p1a')}</div>
       </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+        <div class="ig" style="flex:1;min-width:150px">${catCombos.length>1?`<label>Categoría jugador 2</label>${catSelect('p1b')}`:''}</div>
+        <div class="ig" style="flex:1;min-width:150px"><label>Jugador 2</label>${cpSelect('p1b')}</div>
+      </div>
+      ${catCombos.length>1?`<p style="color:var(--text2);font-size:11px;margin-bottom:6px">💡 Elegí la categoría de cada jugador para que la lista de abajo te muestre solo a ellos (útil en torneos de suma o mixtos, donde cada integrante puede ser de una categoría distinta).</p>`:''}
       <p style="color:var(--text2);font-size:11px;margin-bottom:10px">💡 ¿No está el jugador que buscás? Agregalo en <strong>Configuración → Jugadores del club</strong> y va a aparecer acá.</p>
       <div style="margin-bottom:12px"><span class="day-field-label">Días que pueden jugar (elegí 2)</span>
         <div style="display:flex;gap:8px;flex-wrap:wrap">${dayChips}</div>
