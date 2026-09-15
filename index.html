@@ -1878,11 +1878,12 @@ function renderSupResultados(){
     html+=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap"><span style="font-size:12px;color:var(--text2)">Día de juego (podés elegir cualquiera):</span><select onchange="setZoneDay(${z.id},this.value)" style="padding:6px 10px;border-radius:8px;background:rgba(255,255,255,.05);color:var(--text);border:1px solid var(--border);font-size:13px"><option value="">— Sin asignar —</option>${DIAS_SUP.map(d=>`<option value="${d}" ${z.playDay===d?'selected':''}>${d}${(z.days&&z.days.includes(d))?' ✓ (todas pueden)':''}</option>`).join('')}</select>${(z.days&&z.days.length)?`<span style="font-size:11px;color:var(--text2)">parejas marcaron: ${z.days.map(d=>DIA_ABBR[d]||d).join('/')}</span>`:''}</div>`;
     html+=z.matches.map((m,mi)=>renderSupZM(m,z.id,mi)).join('');
     if(!zoneHasResults(z)){
-      html+=`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)"><div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">✏️ Editar zona (antes de cargar resultados)</div>`;
-      z.pairs.forEach(p=>{
+      html+=`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)"><div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">✏️ Editar zona (antes de cargar resultados)</div>
+      <p style="color:var(--text2);font-size:11px;margin-bottom:8px">💡 Usá ⬆️⬇️ para cambiar quién juega primero. La pareja que quede en las primeras 2 posiciones juega el "Partido 1" (o "Partido 2" si son 4 parejas); el horario de cada partido queda igual, solo cambia quién lo juega.</p>`;
+      z.pairs.forEach((p,pi)=>{
         html+=`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:7px 0;border-bottom:1px dashed var(--border)">
-          <div style="font-weight:600">${esc(p.a)} / ${esc(p.b)} <span class="badge badge-blue" style="font-weight:600;white-space:nowrap">📅 ${diasTexto(p)}</span></div>
-          <div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="openEditPair('${z.id}','${p.id}')">✏️ Editar</button><button class="btn btn-secondary btn-sm" onclick="openMovePair('${z.id}','${p.id}')">🔄 Mover</button></div>
+          <div style="font-weight:600">${esc(p.a)} / ${esc(p.b)} <span class="badge badge-blue" style="font-weight:600;white-space:nowrap">📅 ${diasTexto(p)}</span> <span class="badge" style="background:rgba(255,255,255,.06);color:var(--text2);white-space:nowrap">${pi<2?'Partido 1':'Partido 2'}</span></div>
+          <div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="movePairInZone('${z.id}','${p.id}',-1)" ${pi===0?'disabled':''} title="Mover antes">⬆️</button><button class="btn btn-secondary btn-sm" onclick="movePairInZone('${z.id}','${p.id}',1)" ${pi===z.pairs.length-1?'disabled':''} title="Mover después">⬇️</button><button class="btn btn-secondary btn-sm" onclick="openEditPair('${z.id}','${p.id}')">✏️ Editar</button><button class="btn btn-secondary btn-sm" onclick="openMovePair('${z.id}','${p.id}')">🔄 Mover</button></div>
         </div>`;
       });
       html+=`</div>`;
@@ -2546,6 +2547,20 @@ function relinkZone(z){
   nz.matches.forEach(m=>{if(oldSchedules[m.order])m.schedule=oldSchedules[m.order]});
   z.size=z.pairs.length;z.matches=nz.matches;z.days=nz.days;z.standings=[];z.qualified=[];z.closed=false;
   recalcZone(z);
+}
+// Cambia el orden en que juegan las parejas de una zona (quién juega
+// "Partido 1" vs "Partido 2"), para acomodar a jugadoras que no pueden jugar
+// en el primer horario. relinkZone reconstruye los partidos con el nuevo
+// orden pero mantiene el horario/cancha ya cargado en cada "Partido N".
+async function movePairInZone(zId,pairId,dir){
+  const z=getZone(zId);if(!z)return;
+  if(zoneHasResults(z)){toast('Esta zona ya tiene resultados. No se puede reordenar.');return}
+  const idx=z.pairs.findIndex(p=>p.id===pairId);if(idx<0)return;
+  const newIdx=idx+dir;
+  if(newIdx<0||newIdx>=z.pairs.length)return;
+  [z.pairs[idx],z.pairs[newIdx]]=[z.pairs[newIdx],z.pairs[idx]];
+  relinkZone(z);
+  await save();renderSupContent();toast('✓ Orden actualizado');
 }
 function closeZoneEdit(){document.getElementById('zoneEditModal').style.display='none'}
 function openEditPair(zId,pairId){
