@@ -1769,7 +1769,7 @@ function matchRowHTML(m){
   const sch=m.schedule?`<div class="sch-chip">${m.schedule.day?`<span class="t">📆 ${esc(m.schedule.day)}</span>`:''}${m.schedule.time?`<span class="t">🕐 ${esc(m.schedule.time)}</span>`:''}${m.schedule.court?`<span class="c">🏟️ ${esc(m.schedule.court)}</span>`:''}</div>`:'';
   if(!m.teamA||!m.teamB){
     if(m.pending?.waitForA){
-      const wl=wf=>wf?(wf.result==='winner'?'Gan. P':'Perd. P')+((wf.matchIdx||0)+1):'';
+      const wl=wf=>wf?(wf.result==='winner'?'Ganador Partido ':'Perdedor Partido ')+((wf.matchIdx||0)+1):'';
       const pl=`${wl(m.pending.waitForA)} vs ${wl(m.pending.waitForB)}`;
       return`<div class="zone-match-row"><div class="zone-match-label">${esc(m.label)}</div>
         <div style="text-align:center"><div style="font-size:11px;color:var(--accent3);font-style:italic">${pl}</div></div>${sch}</div>`;
@@ -2995,7 +2995,7 @@ function matchSidesCanvas(m){
     const scoreTxt=m.status==='done'?(m.sets.length?m.sets.map(s=>s.stb?`STB ${s.a}-${s.b}`:`${s.a}-${s.b}`).join(' '):'W.O.'):'VS';
     return{mode:'both',aName:m.teamA.a,aName2:m.teamA.b,bName:m.teamB.a,bName2:m.teamB.b,lW:m.status==='done'&&m.winner===m.teamA.id,rW:m.status==='done'&&m.winner===m.teamB.id,center:scoreTxt};
   }
-  const lab=wf=>wf?(wf.result==='winner'?'Gan. P':'Perd. P')+((wf.matchIdx||0)+1):'';
+  const lab=wf=>wf?(wf.result==='winner'?'Ganador Partido ':'Perdedor Partido ')+((wf.matchIdx||0)+1):'';
   if(m.pending&&m.pending.waitForA)return{mode:'combined',text:`${lab(m.pending.waitForA)} vs ${lab(m.pending.waitForB)}`};
   const known=m.teamA||m.teamB,knownA=!!m.teamA;
   let pl='Por definir';
