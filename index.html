@@ -1768,8 +1768,8 @@ function recalcZone(z){
 function matchRowHTML(m){
   const sch=m.schedule?`<div class="sch-chip">${m.schedule.day?`<span class="t">📆 ${esc(m.schedule.day)}</span>`:''}${m.schedule.time?`<span class="t">🕐 ${esc(m.schedule.time)}</span>`:''}${m.schedule.court?`<span class="c">🏟️ ${esc(m.schedule.court)}</span>`:''}</div>`:'';
   if(!m.teamA||!m.teamB){
-    if(m.pending?.waitForA){
-      const wl=wf=>wf?(wf.result==='winner'?'Ganador Partido ':'Perdedor Partido ')+((wf.matchIdx||0)+1):'';
+    const wl=wf=>wf?(wf.result==='winner'?'Ganador Partido ':'Perdedor Partido ')+((wf.matchIdx||0)+1):'';
+    if(m.pending?.waitForA&&!m.teamA&&!m.teamB){
       const pl=`${wl(m.pending.waitForA)} vs ${wl(m.pending.waitForB)}`;
       return`<div class="zone-match-row"><div class="zone-match-label">${esc(m.label)}</div>
         <div style="text-align:center"><div style="font-size:11px;color:var(--accent3);font-style:italic">${pl}</div></div>${sch}</div>`;
@@ -1778,6 +1778,7 @@ function matchRowHTML(m){
     let pl='⏳ Por definir';
     if(m.pending?.waitFor==='winner')pl=`Ganador Partido ${(m.pending.matchIdx||0)+1}`;
     else if(m.pending?.waitFor==='loser')pl=`Perdedor Partido ${(m.pending.matchIdx||0)+1}`;
+    else if(m.pending?.waitForA)pl=knownA?wl(m.pending.waitForB):wl(m.pending.waitForA);
     const kb=known?`<div><div style="font-size:12px;font-weight:600;color:var(--text);line-height:1.3">${esc(known.a)}</div><div style="font-size:12px;font-weight:600;color:var(--text);line-height:1.3">${esc(known.b)}</div></div>`:null;
     const pb=`<div><div style="font-size:11px;color:var(--accent3);font-style:italic">${pl}</div></div>`;
     return`<div class="zone-match-row"><div class="zone-match-label">${esc(m.label)}</div>
@@ -2574,13 +2575,19 @@ function openEditPair(zId,pairId){
   const p=z.pairs.find(x=>x.id===pairId);if(!p)return;
   const days=p.days||[];
   const chips=DIAS.map(d=>`<label class="day-chip"><input type="checkbox" id="ed_day_${d}" ${days.includes(d)?'checked':''}/> ${d}</label>`).join('');
+  // Mismo criterio que el "Cambiar" de antes del sorteo: el pool sale de la
+  // lista de buena fe del club (S.clubPlayers), no de la Liga — así aparecen
+  // también las jugadoras nuevas que todavía no jugaron ninguna fecha.
+  const pool=availableClubPlayers([p.aId,p.bId].filter(Boolean));
+  const opt=sel=>`<option value="">— Elegir jugador —</option>${pool.map(cp=>`<option value="${cp.id}" ${sel===cp.id?'selected':''}>${esc(clubPlayerLabel(cp))}</option>`).join('')}`;
+  const warnNoLink=(!p.aId||!p.bId)?`<p style="color:var(--danger);font-size:11px;margin-bottom:8px">⚠️ Esta pareja se había cargado con un nombre escrito a mano (de antes de tener la lista del club) y no tiene un jugador de la lista vinculado. Elegilo de las listas de abajo para dejarlo prolijo.</p>`:'';
   document.getElementById('zoneEditBody').innerHTML=`
-    <h2>✏️ Editar pareja</h2>
+    <h2>🔄 Cambiar jugador/a</h2>
     <p>${esc(z.name)}</p>
-    <div class="ig"><label>Jugador 1</label><input id="ed_a" list="ligaSubList" value="${esc(p.a)}"/></div>
-    <div class="ig"><label>Jugador 2</label><input id="ed_b" list="ligaSubList" value="${esc(p.b)}"/></div>
-    ${ligaAvailablePlayerNames().length?`<p style="color:var(--text2);font-size:11px;margin-bottom:10px">💡 ¿Se dio de baja un jugador? Empezá a escribir y te va a sugerir jugadores de la Liga que no estén jugando este torneo, para sustituirlo.</p>`:''}
-    ${ligaAvailableDatalist('ligaSubList')}
+    <p style="color:var(--text2);font-size:12px;margin-bottom:10px">Elegí el reemplazo de la lista de jugadores del club, en vez de escribir el nombre a mano — así no hay riesgo de errores de tipeo ni de duplicar a alguien.</p>
+    ${warnNoLink}
+    <div class="ig"><label>Jugador 1</label><select id="ed_aId">${opt(p.aId)}</select></div>
+    <div class="ig"><label>Jugador 2</label><select id="ed_bId">${opt(p.bId)}</select></div>
     <div style="margin-bottom:12px;text-align:left"><span class="day-field-label">Días que pueden jugar (elegí 2)</span><div style="display:flex;gap:8px;flex-wrap:wrap">${chips}</div></div>
     <div class="modal-btns">
       <button class="btn btn-primary" onclick="savePairEdit('${zId}','${pairId}')">Guardar</button>
@@ -2591,13 +2598,19 @@ function openEditPair(zId,pairId){
 async function savePairEdit(zId,pairId){
   const z=getZone(zId);if(!z)return;
   if(zoneHasResults(z)){toast('La zona ya tiene resultados.');closeZoneEdit();return}
-  const a=document.getElementById('ed_a').value.trim(),b=document.getElementById('ed_b').value.trim();
-  if(!a||!b){toast('Completá ambos jugadores');return}
-  const days=DIAS.filter(d=>document.getElementById('ed_day_'+d)?.checked);
-  if(days.length!==2){toast('Elegí exactamente 2 días');return}
+  const aId=document.getElementById('ed_aId').value,bId=document.getElementById('ed_bId').value;
+  if(!aId||!bId){toast('Elegí ambos jugadores');return}
+  if(aId===bId){toast('Elegí dos jugadores distintos');return}
+  const pa=getClubPlayer(aId),pb=getClubPlayer(bId);
+  if(!pa||!pb){toast('⚠️ Alguno de esos jugadores ya no está en la lista del club. Recargá la página e intentá de nuevo.',4000);return}
   const p=S.pairs.find(x=>x.id===pairId)||z.pairs.find(x=>x.id===pairId);
   if(!p){toast('No se encontró la pareja');return}
-  p.a=a;p.b=b;p.days=days;
+  const usedIds=new Set();
+  S.pairs.forEach(x=>{if(x.id===pairId)return;if(x.aId)usedIds.add(x.aId);if(x.bId)usedIds.add(x.bId)});
+  if(usedIds.has(aId)||usedIds.has(bId)){toast('⚠️ Ese jugador ya está inscrito en otra pareja de este torneo',4000);return}
+  const days=DIAS.filter(d=>document.getElementById('ed_day_'+d)?.checked);
+  if(days.length!==2){toast('Elegí exactamente 2 días');return}
+  p.a=clubPlayerName(pa);p.b=clubPlayerName(pb);p.aId=pa.id;p.bId=pb.id;p.days=days;
   relinkZone(z);
   await save();closeZoneEdit();renderSupContent();toast('✓ Pareja actualizada');
 }
@@ -2996,11 +3009,12 @@ function matchSidesCanvas(m){
     return{mode:'both',aName:m.teamA.a,aName2:m.teamA.b,bName:m.teamB.a,bName2:m.teamB.b,lW:m.status==='done'&&m.winner===m.teamA.id,rW:m.status==='done'&&m.winner===m.teamB.id,center:scoreTxt};
   }
   const lab=wf=>wf?(wf.result==='winner'?'Ganador Partido ':'Perdedor Partido ')+((wf.matchIdx||0)+1):'';
-  if(m.pending&&m.pending.waitForA)return{mode:'combined',text:`${lab(m.pending.waitForA)} vs ${lab(m.pending.waitForB)}`};
+  if(m.pending&&m.pending.waitForA&&!m.teamA&&!m.teamB)return{mode:'combined',text:`${lab(m.pending.waitForA)} vs ${lab(m.pending.waitForB)}`};
   const known=m.teamA||m.teamB,knownA=!!m.teamA;
   let pl='Por definir';
   if(m.pending&&m.pending.waitFor==='winner')pl='Ganador Partido '+((m.pending.matchIdx||0)+1);
   else if(m.pending&&m.pending.waitFor==='loser')pl='Perdedor Partido '+((m.pending.matchIdx||0)+1);
+  else if(m.pending&&m.pending.waitForA)pl=knownA?lab(m.pending.waitForB):lab(m.pending.waitForA);
   return{mode:'half',knownA,name:known?known.a:'',name2:known?known.b:'',placeholder:pl};
 }
 function truncateToWidth(ctx,text,maxW){
