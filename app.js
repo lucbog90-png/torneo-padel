@@ -114,6 +114,7 @@ function migrateLiga(){
     if(!Array.isArray(c.players))c.players=[];
     if(!Array.isArray(c.history))c.history=[];
     c.players.forEach(p=>{
+      p.clubId=p.clubId||null;
       p.points=p.points||0;p.fechas=p.fechas||0;
       p.pj=p.pj||0;p.pg=p.pg||0;p.pp=p.pp||0;
       p.sj=p.sj||0;p.sg=p.sg||0;p.sp=p.sp||0;
@@ -906,6 +907,7 @@ const DIA_ABBR={'Lunes':'Lun','Martes':'Mar','Miércoles':'Mié','Jueves':'Jue',
 const CLUB_CATEGORIES=['1era','2da','3era','4ta','5ta','6ta','7ma','8va'];
 const CLUB_GENDERS=['Caballeros','Damas'];
 let _editingCpId=null; // id del jugador que se está editando en la lista (estado de pantalla, no se guarda)
+let _editingLigaPid=null; // id del jugador de liga que se está vinculando/editando (estado de pantalla, no se guarda)
 function toggleEditClubPlayer(id){_editingCpId=(_editingCpId===id)?null:id;renderSupContent()}
 function clubPlayerName(p){return p?`${p.lastName} ${p.firstName}`.trim():''}
 // Normaliza un nombre para comparar identidad de jugador de Liga sin importar
@@ -974,7 +976,18 @@ async function saveClubPlayerEdit(id){
   const firstName=(fn?.value||'').trim(),lastName=(ln?.value||'').trim();
   if(!firstName||!lastName){toast('Completá nombre y apellido');return}
   p.firstName=firstName;p.lastName=lastName;p.gender=gEl?.value||p.gender;p.category=cEl?.value||p.category;p.whatsapp=(waEl?.value||'').trim();
+  syncLigaPlayerNames(id);
   await save();renderSupContent();toast('✓ Jugador actualizado');
+}
+// Cuando se corrige el nombre de un jugador en la lista de buena fe, se propaga
+// a todos los jugadores de Liga vinculados a ese id (en cualquier categoría),
+// para que el ranking siempre muestre el nombre correcto sin tener que editarlo
+// dos veces.
+function syncLigaPlayerNames(clubId){
+  const cp=getClubPlayer(clubId);if(!cp)return;
+  (S.liga?.categories||[]).forEach(c=>{
+    (c.players||[]).forEach(p=>{if(p.clubId===clubId)p.name=clubPlayerName(cp)});
+  });
 }
 
 // ═══════════════════════════════════
@@ -1754,7 +1767,7 @@ function computeLigaResults(){
       });
     }
   }
-  return S.pairs.map(p=>{const instancia=elim[p.id]||'zona';return{pairId:p.id,a:p.a,b:p.b,instancia,points:LIGA_POINTS[instancia]}});
+  return S.pairs.map(p=>{const instancia=elim[p.id]||'zona';return{pairId:p.id,a:p.a,b:p.b,aId:p.aId||null,bId:p.bId||null,instancia,points:LIGA_POINTS[instancia]}});
 }
 function computePairMatchStats(pairId){
   const st={pj:0,pg:0,pp:0,sj:0,sg:0,sp:0,gj:0,gg:0,gp:0};
@@ -1950,9 +1963,10 @@ async function confirmLigaClose(){
   const entries=[];
   _ligaPreview.forEach(r=>{
     const st=computePairMatchStats(r.pairId);
-    [r.a,r.b].forEach(name=>{
+    [[r.a,r.aId],[r.b,r.bId]].forEach(([name,clubId])=>{
       let pl=cat.players.find(p=>normName(p.name)===normName(name));
-      if(!pl){pl={id:uid(),name:name,points:0,fechas:0,pj:0,pg:0,pp:0,sj:0,sg:0,sp:0,gj:0,gg:0,gp:0};cat.players.push(pl)}
+      if(!pl){pl={id:uid(),clubId:clubId||null,name:name,points:0,fechas:0,pj:0,pg:0,pp:0,sj:0,sg:0,sp:0,gj:0,gg:0,gp:0};cat.players.push(pl)}
+      else if(!pl.clubId&&clubId)pl.clubId=clubId;
       pl.points+=r.points;pl.fechas+=1;
       pl.pj=(pl.pj||0)+st.pj;pl.pg=(pl.pg||0)+st.pg;pl.pp=(pl.pp||0)+st.pp;
       pl.sj=(pl.sj||0)+st.sj;pl.sg=(pl.sg||0)+st.sg;pl.sp=(pl.sp||0)+st.sp;
@@ -2458,7 +2472,22 @@ function renderSupLiga(){
   }
   const cat=cats[sel];
   const ranking=[...cat.players].sort((a,b)=>b.points-a.points||b.fechas-a.fechas);
-  const playerRows=ranking.map((p,i)=>`<tr><td>${i+1}°</td><td style="font-weight:600">${esc(p.name)}</td><td style="font-weight:700;color:var(--gold)">${p.points}</td><td style="color:var(--text2)">${p.fechas}</td><td style="display:flex;gap:4px"><button class="btn btn-secondary btn-sm" onclick="openPlayerStats(${sel},'${p.id}')">📊</button><button class="btn btn-danger btn-sm" onclick="removeLigaPlayer(${sel},'${p.id}')">🗑️</button></td></tr>`).join('');
+  const availableForLink=availableClubPlayersForLiga(sel);
+  const playerRows=ranking.map((p,i)=>{
+    if(_editingLigaPid===p.id){
+      const opts=[{v:'',label:'— Nombre manual (no vincular) —'}].concat(availableForLink.map(cp=>({v:cp.id,label:clubPlayerLabel(cp)})));
+      return`<tr><td colspan="5"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;padding:8px 10px;border:1px solid var(--accent);border-radius:8px;background:rgba(0,229,160,.05)">
+        <div class="ig" style="min-width:220px;margin-bottom:0"><label style="font-size:11px">Vincular con jugador de la lista de buena fe</label>
+          <select id="lp_link_${p.id}" onchange="document.getElementById('lp_name_${p.id}').disabled=!!this.value">${opts.map(o=>`<option value="${o.v}">${esc(o.label)}</option>`).join('')}</select>
+        </div>
+        <div class="ig" style="flex:1;min-width:160px;margin-bottom:0"><label style="font-size:11px">o nombre manual</label><input id="lp_name_${p.id}" value="${esc(p.name)}" ${p.clubId?'disabled':''}/></div>
+        <button class="btn btn-primary btn-sm" onclick="saveLigaPlayerEdit(${sel},'${p.id}')">💾 Guardar</button>
+        <button class="btn btn-secondary btn-sm" onclick="toggleEditLigaPlayer('${p.id}')">Cancelar</button>
+      </div></td></tr>`;
+    }
+    const warn=p.clubId?'':' <span title="Cargado con nombre escrito a mano, sin vincular a la lista de buena fe" style="font-size:11px">⚠️</span>';
+    return`<tr><td style="font-weight:700">${['🥇','🥈','🥉'][i]||(i+1)+'°'}</td><td style="font-weight:600">${esc(p.name)}${warn}</td><td style="font-weight:700;color:var(--gold)">${p.points}</td><td style="color:var(--text2)">${p.fechas}</td><td style="display:flex;gap:4px"><button class="btn btn-secondary btn-sm" onclick="openPlayerStats(${sel},'${p.id}')">📊</button><button class="btn btn-secondary btn-sm" onclick="toggleEditLigaPlayer('${p.id}')">✏️</button><button class="btn btn-danger btn-sm" onclick="removeLigaPlayer(${sel},'${p.id}')">🗑️</button></td></tr>`;
+  }).join('');
   const histRows=cat.history.length?cat.history.slice().reverse().map(h=>`<div style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;font-size:12px;cursor:pointer" onclick="viewLigaFecha(${sel},'${h.id}')"><strong>${esc(h.label)}</strong> <span style="color:var(--text2)">— ${h.date} · ${h.entries.length} jugadores</span> <span style="float:right;color:var(--accent)">👁️ Ver</span></div>`).join(''):'';
   html+=`<div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
@@ -2468,10 +2497,17 @@ function renderSupLiga(){
         <button class="btn btn-danger btn-sm" onclick="deleteLigaCategory(${sel})">🗑️ Borrar categoría</button>
       </div>
     </div>
-    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
-      <input id="ligaPlayerName" placeholder="Nombre y apellido del jugador" style="flex:1;min-width:180px" onkeydown="if(event.key==='Enter')addLigaPlayer(${sel})"/>
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:flex-end">
+      <div class="ig" style="min-width:220px;margin-bottom:0"><label style="font-size:11px">Elegir de la lista de buena fe</label>
+        <select id="ligaPlayerSelect" onchange="document.getElementById('ligaPlayerName').disabled=!!this.value">
+          <option value="">— Nombre manual —</option>
+          ${availableForLink.map(cp=>`<option value="${cp.id}">${esc(clubPlayerLabel(cp))}</option>`).join('')}
+        </select>
+      </div>
+      <div class="ig" style="flex:1;min-width:160px;margin-bottom:0"><label style="font-size:11px">o nombre manual</label><input id="ligaPlayerName" placeholder="Nombre y apellido" onkeydown="if(event.key==='Enter')addLigaPlayer(${sel})"/></div>
       <button class="btn btn-primary btn-sm" onclick="addLigaPlayer(${sel})">+ Agregar jugador</button>
     </div>
+    <p style="color:var(--text2);font-size:11px;margin-top:-8px;margin-bottom:14px">💡 Elegir de la lista evita nombres mal escritos: si más adelante corregís el nombre en la lista de buena fe (pestaña Config), se corrige solo en este ranking.</p>
     ${cat.players.length?`<div class="tbl-wrap"><table><thead><tr><th>Pos</th><th>Jugador</th><th>Pts</th><th>Fechas</th><th></th></tr></thead><tbody>${playerRows}</tbody></table></div><button class="btn btn-secondary btn-sm" style="margin-top:10px" onclick="printLigaRanking(${sel})">⬇️ Descargar ranking (PDF)</button>`:'<p style="color:var(--text2);font-size:13px">Todavía no cargaste jugadores en esta categoría.</p>'}
   </div>
   ${histRows?`<div class="card"><div class="card-title">📅 Fechas cargadas <span style="font-weight:400;color:var(--text2);font-size:11px">(tocá una para ver el detalle)</span></div>${histRows}</div>`:''}`;
@@ -2497,15 +2533,46 @@ function deleteLigaCategory(i){
     save();renderSupContent();toast('Categoría borrada ✓');
   });
 }
+// Jugadores de la lista de buena fe que todavía no están vinculados a ningún
+// jugador de esta categoría de Liga (para armar el selector de "agregar/vincular").
+function availableClubPlayersForLiga(catIdx){
+  const c=S.liga.categories[catIdx];if(!c)return[];
+  const used=new Set(c.players.filter(p=>p.clubId).map(p=>p.clubId));
+  return (S.clubPlayers||[]).filter(p=>!used.has(p.id)).sort((a,b)=>(a.lastName+a.firstName).localeCompare(b.lastName+b.firstName,'es'));
+}
 async function addLigaPlayer(catIdx){
   const c=S.liga.categories[catIdx];if(!c)return;
-  const inp=document.getElementById('ligaPlayerName');
-  const name=(inp.value||'').trim();
-  if(!name){toast('Escribí un nombre');return}
+  const selEl=document.getElementById('ligaPlayerSelect'),inp=document.getElementById('ligaPlayerName');
+  const clubId=selEl?.value||'';
+  let name,linkId=null;
+  if(clubId){
+    const cp=getClubPlayer(clubId);if(!cp){toast('No se encontró ese jugador');return}
+    name=clubPlayerName(cp);linkId=cp.id;
+  }else{
+    name=(inp?.value||'').trim();
+    if(!name){toast('Escribí un nombre o elegí uno de la lista');return}
+  }
   if(c.players.some(p=>normName(p.name)===normName(name))){toast('Ese jugador ya está en la lista');return}
-  c.players.push({id:uid(),name,points:0,fechas:0});
-  inp.value='';
+  c.players.push({id:uid(),clubId:linkId,name,points:0,fechas:0});
+  if(inp)inp.value='';
   await save();renderSupContent();toast('✓ Jugador agregado');
+}
+function toggleEditLigaPlayer(pid){_editingLigaPid=(_editingLigaPid===pid)?null:pid;renderSupContent()}
+async function saveLigaPlayerEdit(catIdx,pid){
+  const c=S.liga.categories[catIdx];if(!c)return;
+  const p=c.players.find(x=>x.id===pid);if(!p)return;
+  const linkSel=document.getElementById('lp_link_'+pid),nameInp=document.getElementById('lp_name_'+pid);
+  const linkedId=linkSel?.value||'';
+  if(linkedId){
+    const cp=getClubPlayer(linkedId);if(!cp){toast('No se encontró ese jugador');return}
+    p.clubId=cp.id;p.name=clubPlayerName(cp);
+  }else{
+    const name=(nameInp?.value||'').trim();
+    if(!name){toast('Escribí un nombre');return}
+    p.clubId=null;p.name=name;
+  }
+  _editingLigaPid=null;
+  await save();renderSupContent();toast('✓ Jugador actualizado');
 }
 function removeLigaPlayer(catIdx,pid){
   const c=S.liga.categories[catIdx];if(!c)return;
