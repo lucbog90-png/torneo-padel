@@ -115,6 +115,7 @@ function migrateLiga(){
     if(!Array.isArray(c.history))c.history=[];
     c.players.forEach(p=>{
       p.clubId=p.clubId||null;
+      p.catChange=p.catChange||null;
       p.points=p.points||0;p.fechas=p.fechas||0;
       p.pj=p.pj||0;p.pg=p.pg||0;p.pp=p.pp||0;
       p.sj=p.sj||0;p.sg=p.sg||0;p.sp=p.sp||0;
@@ -628,10 +629,11 @@ function renderLigaPlayerView(){
   const catBtns=cats.length>1?`<div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:10px;margin-bottom:10px;-webkit-overflow-scrolling:touch">${cats.map((c,i)=>`<button onclick="selectLigaViewCat(${i})" style="flex:0 0 auto;padding:8px 16px;border-radius:20px;border:1px solid ${i===sel?'var(--gold)':'var(--border)'};background:${i===sel?'var(--gold)':'transparent'};color:${i===sel?'#3a2c00':'var(--text)'};font-weight:700;font-size:13px;white-space:nowrap;cursor:pointer">${esc(c.name)}</button>`).join('')}</div>`:'';
   const cat=cats[sel];
   const ranking=[...cat.players].sort((a,b)=>b.points-a.points||b.fechas-a.fechas);
-  const rows=ranking.map((p,i)=>`<tr><td style="font-weight:700">${['🥇','🥈','🥉'][i]||(i+1)+'°'}</td><td style="font-weight:600">${esc(p.name)}</td><td style="font-weight:700;color:var(--gold)">${p.points}</td><td style="color:var(--text2)">${p.fechas}</td><td><button class="btn btn-secondary btn-sm" onclick="openPlayerStats(${sel},'${p.id}')">📊</button></td></tr>`).join('');
+  const rows=ranking.map((p,i)=>`<tr><td style="font-weight:700">${['🥇','🥈','🥉'][i]||(i+1)+'°'}</td><td style="font-weight:600">${esc(p.name)}${ligaCatChangeArrow(p)}</td><td style="font-weight:700;color:var(--gold)">${p.points}</td><td style="color:var(--text2)">${p.fechas}</td><td><button class="btn btn-secondary btn-sm" onclick="openPlayerStats(${sel},'${p.id}')">📊</button></td></tr>`).join('');
   return`<div class="card">
     <div class="card-title">🏅 Ranking — ${esc(cat.name)}</div>
     ${catBtns}
+    ${ligaCatChangeLegend(ranking)}
     ${ranking.length?`<div class="tbl-wrap"><table><thead><tr><th>Pos</th><th>Jugador</th><th>Pts</th><th>Fechas</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`:'<p style="color:var(--text2);font-size:13px">Todavía no hay jugadores con puntos en esta categoría.</p>'}
   </div>`;
 }
@@ -906,6 +908,33 @@ const DIA_ABBR={'Lunes':'Lun','Martes':'Mar','Miércoles':'Mié','Jueves':'Jue',
 // evitar duplicados/typos y tener una única fuente de verdad.
 const CLUB_CATEGORIES=['1era','2da','3era','4ta','5ta','6ta','7ma','8va'];
 const CLUB_GENDERS=['Caballeros','Damas'];
+// Categorías ordenadas de mejor (1era) a menor (8va). dir=-1 asciende (mejor
+// categoría), dir=1 desciende. Devuelve null si ya está en el límite.
+function shiftClubCategory(current,dir){
+  const i=CLUB_CATEGORIES.indexOf(current);
+  if(i<0)return null;
+  const j=i+dir;
+  return(j>=0&&j<CLUB_CATEGORIES.length)?CLUB_CATEGORIES[j]:null;
+}
+// Flechita de ascenso/descenso marcada por el supervisor junto al nombre,
+// visible tanto para el supervisor como para los jugadores. Usamos ↑/↓ de
+// texto plano (no emoji ⬆️/⬇️) porque los emoji de flecha ya traen su propio
+// color fijo y el CSS "color" no los tiñe — con texto plano sí funciona.
+function ligaCatChangeArrow(p){
+  if(p.catChange==='up')return' <span title="Ascendida de categoría" style="color:#2ecc71;font-weight:900;font-size:15px">▲</span>';
+  if(p.catChange==='down')return' <span title="Descendida de categoría" style="color:var(--danger);font-weight:900;font-size:15px">▼</span>';
+  return'';
+}
+// Referencia de qué significan las flechitas, para mostrar arriba del ranking
+// (solo si hay algún jugador marcado en esa categoría).
+function ligaCatChangeLegend(players){
+  if(!players.some(p=>p.catChange))return'';
+  return`<p style="font-size:11px;color:var(--text2);margin:0 0 10px">
+    <span style="color:#2ecc71;font-weight:900;font-size:14px">▲</span> Ascendida de categoría
+    &nbsp;&nbsp;·&nbsp;&nbsp;
+    <span style="color:var(--danger);font-weight:900;font-size:14px">▼</span> Descendida de categoría
+  </p>`;
+}
 let _editingCpId=null; // id del jugador que se está editando en la lista (estado de pantalla, no se guarda)
 let _editingLigaPid=null; // id del jugador de liga que se está vinculando/editando (estado de pantalla, no se guarda)
 function toggleEditClubPlayer(id){_editingCpId=(_editingCpId===id)?null:id;renderSupContent()}
@@ -2483,10 +2512,16 @@ function renderSupLiga(){
         <div class="ig" style="flex:1;min-width:160px;margin-bottom:0"><label style="font-size:11px">o nombre manual</label><input id="lp_name_${p.id}" value="${esc(p.name)}" ${p.clubId?'disabled':''}/></div>
         <button class="btn btn-primary btn-sm" onclick="saveLigaPlayerEdit(${sel},'${p.id}')">💾 Guardar</button>
         <button class="btn btn-secondary btn-sm" onclick="toggleEditLigaPlayer('${p.id}')">Cancelar</button>
+        <div style="width:100%;display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding-top:8px;margin-top:4px;border-top:1px solid var(--border)">
+          <span style="font-size:11px;color:var(--text2)">Categoría (lista de buena fe):</span>
+          <button class="btn btn-secondary btn-sm" style="color:#2ecc71" onclick="setLigaPlayerChange(${sel},'${p.id}','up')">⬆️ Ascender</button>
+          <button class="btn btn-secondary btn-sm" style="color:var(--danger)" onclick="setLigaPlayerChange(${sel},'${p.id}','down')">⬇️ Descender</button>
+          ${p.catChange?`<button class="btn btn-secondary btn-sm" onclick="clearLigaPlayerChange(${sel},'${p.id}')">✖️ Quitar flecha</button>`:''}
+        </div>
       </div></td></tr>`;
     }
     const warn=p.clubId?'':' <span title="Cargado con nombre escrito a mano, sin vincular a la lista de buena fe" style="font-size:11px">⚠️</span>';
-    return`<tr><td style="font-weight:700">${['🥇','🥈','🥉'][i]||(i+1)+'°'}</td><td style="font-weight:600">${esc(p.name)}${warn}</td><td style="font-weight:700;color:var(--gold)">${p.points}</td><td style="color:var(--text2)">${p.fechas}</td><td style="display:flex;gap:4px"><button class="btn btn-secondary btn-sm" onclick="openPlayerStats(${sel},'${p.id}')">📊</button><button class="btn btn-secondary btn-sm" onclick="toggleEditLigaPlayer('${p.id}')">✏️</button><button class="btn btn-danger btn-sm" onclick="removeLigaPlayer(${sel},'${p.id}')">🗑️</button></td></tr>`;
+    return`<tr><td style="font-weight:700">${['🥇','🥈','🥉'][i]||(i+1)+'°'}</td><td style="font-weight:600">${esc(p.name)}${warn}${ligaCatChangeArrow(p)}</td><td style="font-weight:700;color:var(--gold)">${p.points}</td><td style="color:var(--text2)">${p.fechas}</td><td style="display:flex;gap:4px"><button class="btn btn-secondary btn-sm" onclick="openPlayerStats(${sel},'${p.id}')">📊</button><button class="btn btn-secondary btn-sm" onclick="toggleEditLigaPlayer('${p.id}')">✏️</button><button class="btn btn-danger btn-sm" onclick="removeLigaPlayer(${sel},'${p.id}')">🗑️</button></td></tr>`;
   }).join('');
   const histRows=cat.history.length?cat.history.slice().reverse().map(h=>`<div style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;font-size:12px;cursor:pointer" onclick="viewLigaFecha(${sel},'${h.id}')"><strong>${esc(h.label)}</strong> <span style="color:var(--text2)">— ${h.date} · ${h.entries.length} jugadores</span> <span style="float:right;color:var(--accent)">👁️ Ver</span></div>`).join(''):'';
   html+=`<div class="card">
@@ -2508,6 +2543,7 @@ function renderSupLiga(){
       <button class="btn btn-primary btn-sm" onclick="addLigaPlayer(${sel})">+ Agregar jugador</button>
     </div>
     <p style="color:var(--text2);font-size:11px;margin-top:-8px;margin-bottom:14px">💡 Elegir de la lista evita nombres mal escritos: si más adelante corregís el nombre en la lista de buena fe (pestaña Config), se corrige solo en este ranking.</p>
+    ${ligaCatChangeLegend(cat.players)}
     ${cat.players.length?`<div class="tbl-wrap"><table><thead><tr><th>Pos</th><th>Jugador</th><th>Pts</th><th>Fechas</th><th></th></tr></thead><tbody>${playerRows}</tbody></table></div><button class="btn btn-secondary btn-sm" style="margin-top:10px" onclick="printLigaRanking(${sel})">⬇️ Descargar ranking (PDF)</button>`:'<p style="color:var(--text2);font-size:13px">Todavía no cargaste jugadores en esta categoría.</p>'}
   </div>
   ${histRows?`<div class="card"><div class="card-title">📅 Fechas cargadas <span style="font-weight:400;color:var(--text2);font-size:11px">(tocá una para ver el detalle)</span></div>${histRows}</div>`:''}`;
@@ -2573,6 +2609,38 @@ async function saveLigaPlayerEdit(catIdx,pid){
   }
   _editingLigaPid=null;
   await save();renderSupContent();toast('✓ Jugador actualizado');
+}
+// Marca a un jugador de Liga como ascendido/descendido de categoría. Si está
+// vinculado a la lista de buena fe, además le cambia la categoría ahí mismo
+// (1era es la más alta, 8va la más baja). Si no está vinculado, solo queda la
+// flechita como marca visual, sin tocar ninguna categoría.
+function setLigaPlayerChange(catIdx,pid,dir){
+  const c=S.liga.categories[catIdx];if(!c)return;
+  const p=c.players.find(x=>x.id===pid);if(!p)return;
+  const delta=dir==='up'?-1:1;
+  const cp=p.clubId?getClubPlayer(p.clubId):null;
+  if(cp){
+    const newCat=shiftClubCategory(cp.category,delta);
+    if(!newCat){toast(dir==='up'?'Ya está en la categoría más alta (1era)':'Ya está en la categoría más baja (8va)');return}
+    showConfirm(
+      dir==='up'?'⬆️ Ascender jugador':'⬇️ Descender jugador',
+      `¿${dir==='up'?'Ascender':'Descender'} a <strong>${esc(p.name)}</strong> de <strong>${esc(cp.category)}</strong> a <strong>${esc(newCat)}</strong>? Se actualiza su categoría en la lista de buena fe y queda marcado con la flecha en el ranking.`,
+      dir==='up'?'var(--accent)':'var(--danger)',dir==='up'?'✅ Sí, ascender':'✅ Sí, descender',
+      async()=>{cp.category=newCat;p.catChange=dir;await save();renderSupContent();toast(dir==='up'?'✓ Jugador ascendido':'✓ Jugador descendido')}
+    );
+    return;
+  }
+  showConfirm(
+    dir==='up'?'⬆️ Marcar como ascendida':'⬇️ Marcar como descendida',
+    'Este jugador no está vinculado a la lista de buena fe, así que solo se va a marcar la flecha en el ranking (no se cambia ninguna categoría). ¿Continuar?',
+    dir==='up'?'var(--accent)':'var(--danger)','Sí, marcar',
+    async()=>{p.catChange=dir;await save();renderSupContent();toast('✓ Marca actualizada')}
+  );
+}
+function clearLigaPlayerChange(catIdx,pid){
+  const c=S.liga.categories[catIdx];if(!c)return;
+  const p=c.players.find(x=>x.id===pid);if(!p)return;
+  p.catChange=null;save();renderSupContent();toast('Marca quitada');
 }
 function removeLigaPlayer(catIdx,pid){
   const c=S.liga.categories[catIdx];if(!c)return;
