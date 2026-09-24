@@ -936,6 +936,7 @@ function ligaCatChangeLegend(players){
   </p>`;
 }
 let _editingCpId=null; // id del jugador que se está editando en la lista (estado de pantalla, no se guarda)
+let _cpListFilter={gender:'',category:''}; // filtro de género/categoría de la lista de buena fe (estado de pantalla, no se guarda)
 let _editingLigaPid=null; // id del jugador de liga que se está vinculando/editando (estado de pantalla, no se guarda)
 function toggleEditClubPlayer(id){_editingCpId=(_editingCpId===id)?null:id;renderSupContent()}
 function clubPlayerName(p){return p?`${p.lastName} ${p.firstName}`.trim():''}
@@ -2321,8 +2322,38 @@ async function loadVisitStats(){
     boxT.textContent='—';boxA.textContent='—';
   }
 }
+function setCpListFilter(){
+  _cpListFilter={gender:document.getElementById('cpFilterGender')?.value||'',category:document.getElementById('cpFilterCategory')?.value||''};
+  renderSupContent();
+}
+function clearCpListFilter(){_cpListFilter={gender:'',category:''};renderSupContent()}
+// Lista de buena fe filtrada por el género/categoría elegido arriba, para que
+// no quede todo un listado larguísimo mientras se van cargando jugadores. El
+// que se está editando en este momento se muestra siempre, aunque no matchee
+// el filtro (por si se le cambia la categoría a mitad de la edición).
+function filteredClubPlayers(){
+  const all=[...(S.clubPlayers||[])].sort((a,b)=>(a.lastName+a.firstName).localeCompare(b.lastName+b.firstName,'es'));
+  return all.filter(p=>{
+    if(_editingCpId&&p.id===_editingCpId)return true;
+    if(_cpListFilter.gender&&p.gender!==_cpListFilter.gender)return false;
+    if(_cpListFilter.category&&p.category!==_cpListFilter.category)return false;
+    return true;
+  });
+}
 function renderClubPlayersCard(){
-  const players=[...(S.clubPlayers||[])].sort((a,b)=>(a.lastName+a.firstName).localeCompare(b.lastName+b.firstName,'es'));
+  const allCount=(S.clubPlayers||[]).length;
+  const players=filteredClubPlayers();
+  const hasFilter=!!(_cpListFilter.gender||_cpListFilter.category);
+  const filterBar=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">
+    <div class="ig" style="min-width:130px;margin-bottom:0"><label style="font-size:11px">Filtrar por género</label>
+      <select id="cpFilterGender" onchange="setCpListFilter()"><option value="">Todos</option>${CLUB_GENDERS.map(g=>`<option value="${g}" ${_cpListFilter.gender===g?'selected':''}>${g}</option>`).join('')}</select>
+    </div>
+    <div class="ig" style="min-width:110px;margin-bottom:0"><label style="font-size:11px">Filtrar por categoría</label>
+      <select id="cpFilterCategory" onchange="setCpListFilter()"><option value="">Todas</option>${CLUB_CATEGORIES.map(c=>`<option value="${c}" ${_cpListFilter.category===c?'selected':''}>${c}</option>`).join('')}</select>
+    </div>
+    ${hasFilter?`<button class="btn btn-secondary btn-sm" onclick="clearCpListFilter()">✕ Quitar filtro</button>`:''}
+    <span style="font-size:11px;color:var(--text2)">${players.length} de ${allCount} jugador${allCount===1?'':'es'}</span>
+  </div>`;
   const rows=players.map(p=>{
     if(_editingCpId===p.id){
       return`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;padding:8px 10px;border:1px solid var(--accent);border-radius:8px;margin-bottom:6px;background:rgba(0,229,160,.05)">
@@ -2343,17 +2374,20 @@ function renderClubPlayersCard(){
       <button class="btn btn-danger btn-sm" onclick="removeClubPlayer('${p.id}')">✕</button>
     </div>`;
   }).join('');
+  const emptyMsg=allCount===0?'Todavía no cargaste ningún jugador.':'No hay jugadores cargados con ese filtro.';
   return`<div class="card"><div class="card-title">👥 Jugadores del club (lista de buena fe)</div>
     <p style="color:var(--text2);font-size:13px;margin-bottom:14px">Cargá acá a todos los jugadores del club una sola vez. Al inscribir parejas en un torneo (pestaña Inscripción), se eligen de esta lista en vez de escribirse a mano — así no hay duplicados ni nombres mal escritos.</p>
-    ${players.length?rows:`<p style="color:var(--text2);font-size:13px;margin-bottom:10px">Todavía no cargaste ningún jugador.</p>`}
+    ${allCount?filterBar:''}
+    ${players.length?rows:`<p style="color:var(--text2);font-size:13px;margin-bottom:10px">${emptyMsg}</p>`}
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
       <div class="ig" style="flex:1;min-width:110px;margin-bottom:0"><label style="font-size:11px">Nombre</label><input id="newCpFirst" placeholder="Ej: Juan"/></div>
       <div class="ig" style="flex:1;min-width:110px;margin-bottom:0"><label style="font-size:11px">Apellido</label><input id="newCpLast" placeholder="Ej: Pérez"/></div>
-      <div class="ig" style="min-width:120px;margin-bottom:0"><label style="font-size:11px">Género</label><select id="newCpGender">${CLUB_GENDERS.map(g=>`<option value="${g}">${g}</option>`).join('')}</select></div>
-      <div class="ig" style="min-width:110px;margin-bottom:0"><label style="font-size:11px">Categoría</label><select id="newCpCategory">${CLUB_CATEGORIES.map(c=>`<option value="${c}">${c}</option>`).join('')}</select></div>
+      <div class="ig" style="min-width:120px;margin-bottom:0"><label style="font-size:11px">Género</label><select id="newCpGender">${CLUB_GENDERS.map(g=>`<option value="${g}" ${(_cpListFilter.gender||CLUB_GENDERS[0])===g?'selected':''}>${g}</option>`).join('')}</select></div>
+      <div class="ig" style="min-width:110px;margin-bottom:0"><label style="font-size:11px">Categoría</label><select id="newCpCategory">${CLUB_CATEGORIES.map(c=>`<option value="${c}" ${(_cpListFilter.category||CLUB_CATEGORIES[0])===c?'selected':''}>${c}</option>`).join('')}</select></div>
       <div class="ig" style="flex:1;min-width:150px;margin-bottom:0"><label style="font-size:11px">WhatsApp (opcional)</label><input id="newCpWhatsapp" placeholder="549 3562525011"/></div>
       <button class="btn btn-primary btn-sm" onclick="addClubPlayer()">+ Agregar</button>
     </div>
+    <p style="color:var(--text2);font-size:11px;margin-top:8px">💡 Si filtraste por género/categoría arriba, el formulario de agregar ya arranca con esa combinación elegida — para cargar varios jugadores de la misma categoría seguidos sin tener que reelegirla cada vez.</p>
   </div>`;
 }
 function renderConfig(){
