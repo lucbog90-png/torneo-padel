@@ -1043,16 +1043,28 @@ function matchRivalName(team){return team?`${team.a} / ${team.b}`:'rival a defin
 // Recorre zonas y llaves y arma una fila por CADA jugador de cada partido que
 // ya tiene día y horario cargado, todavía no jugado, con los dos equipos ya
 // definidos (para no avisar antes de saber el rival).
+// El día del horario es texto libre ("Sábado", "sabado 4/10", "Mié"...), así que
+// para ordenar lo normalizamos (sin tildes, minúsculas) y buscamos qué día de la
+// semana contiene. Lunes=0 ... Domingo=6; si no se reconoce, va al final (99).
+function normDayKey(d){return String(d||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim()}
+function dayOrderIdx(d){
+  const m=normDayKey(d).match(/lun|mar|mie|jue|vie|sab|dom/);
+  return m?['lun','mar','mie','jue','vie','sab','dom'].indexOf(m[0]):99;
+}
+// Devuelve los recordatorios armables (items) y, aparte, lo que quedó afuera
+// para poder explicarle al supervisor por qué no aparece.
 function collectReminders(){
-  const items=[];
+  const items=[],skipped=[];let noSchedule=0;
   const pushForMatch=(m,ctx)=>{
     if(!m||m.status==='done')return;
-    if(!m.schedule||!m.schedule.day||!m.schedule.time)return;
-    if(!m.teamA||!m.teamB||!m.teamA.id||!m.teamB.id)return;
+    const hasTeams=!!(m.teamA&&m.teamB&&m.teamA.id&&m.teamB.id);
+    const hasSch=!!(m.schedule&&m.schedule.day&&m.schedule.time);
+    if(!hasSch){if(hasTeams)noSchedule++;return}
+    if(!hasTeams){skipped.push({ctx,day:m.schedule.day,time:m.schedule.time,reason:'rival'});return}
     [[m.teamA,m.teamB],[m.teamB,m.teamA]].forEach(([team,rival])=>{
-      ['aId','bId'].forEach(idField=>{
-        const pid=team[idField];if(!pid)return;
-        const cp=getClubPlayer(pid);if(!cp)return;
+      [['aId','a'],['bId','b']].forEach(([idField,nameField])=>{
+        const cp=team[idField]?getClubPlayer(team[idField]):null;
+        if(!cp){skipped.push({ctx,day:m.schedule.day,time:m.schedule.time,reason:'sinVincular',playerName:team[nameField]||''});return}
         items.push({playerId:cp.id,playerName:clubPlayerName(cp),firstName:cp.firstName,whatsapp:cp.whatsapp||'',
           matchId:m.id,ctx,day:m.schedule.day,time:m.schedule.time,court:m.schedule.court||'',rival:matchRivalName(rival)});
       });
@@ -1060,36 +1072,51 @@ function collectReminders(){
   };
   (S.zones||[]).forEach(z=>(z.matches||[]).forEach(m=>pushForMatch(m,`Zona ${z.letter}`)));
   (S.bracket||[]).forEach(rd=>(rd.matches||[]).forEach(m=>pushForMatch(m,rd.name||'Llave')));
-  const dOrder=d=>{const i=DIAS_SUP.indexOf(d);return i<0?99:i};
-  items.sort((x,y)=>dOrder(x.day)-dOrder(y.day)||(x.time||'').localeCompare(y.time||'')||x.playerName.localeCompare(y.playerName,'es'));
-  return items;
+  items.sort((x,y)=>dayOrderIdx(x.day)-dayOrderIdx(y.day)||normDayKey(x.day).localeCompare(normDayKey(y.day),'es',{numeric:true})||(x.time||'').localeCompare(y.time||'')||x.playerName.localeCompare(y.playerName,'es'));
+  return{items,skipped,noSchedule};
 }
 function reminderMessage(x){
-  return `Hola ${x.firstName}! 🎾 Te recordamos tu partido (${x.ctx}): ${x.day} a las ${x.time} hs${x.court?', cancha '+x.court:''}. Rival: ${x.rival}. ¡Suerte!`;
+  return `Hola ${x.firstName}! Te recordamos tu partido (${x.ctx}): ${x.day} a las ${x.time} hs${x.court?', cancha '+x.court:''}. Rival: ${x.rival}. ¡Éxitos!`;
 }
 function renderSupAvisos(){
-  const items=collectReminders();
+  const {items,skipped,noSchedule}=collectReminders();
   const intro=`<div class="card" style="padding:14px;margin-bottom:14px">
     <div class="card-title">📲 Avisos por WhatsApp</div>
-    <p style="color:var(--text2);font-size:13px;margin:0">Estos son los próximos partidos con día y horario cargado. Tocá el botón para abrir WhatsApp con el mensaje ya escrito, listo para mandarle a cada jugador. Para que aparezca el botón, el jugador tiene que tener WhatsApp cargado en "Jugadores del club" (Configuración).</p>
+    <p style="color:var(--text2);font-size:13px;margin:0">Estos son los próximos partidos con día y horario cargado, ordenados por día (lunes primero) y horario. Tocá el botón para abrir WhatsApp con el mensaje ya escrito, listo para mandarle a cada jugador. Para que aparezca el botón, el jugador tiene que tener WhatsApp cargado en "Jugadores del club" (Configuración).</p>
   </div>`;
-  if(!items.length)return intro+`<div class="empty"><div class="ei">📲</div><p>Todavía no hay partidos con día y horario cargado.</p></div>`;
   const withWa=items.filter(x=>x.whatsapp),withoutWa=items.filter(x=>!x.whatsapp);
-  const rows=withWa.map(x=>{
-    const link=`https://wa.me/${normalizeWhatsappAR(x.whatsapp)}?text=${encodeURIComponent(reminderMessage(x))}`;
-    return `<div class="sup-match" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+  const groups=[];
+  withWa.forEach(x=>{
+    const key=normDayKey(x.day);
+    let g=groups[groups.length-1];
+    if(!g||g.key!==key){g={key,label:x.day,rows:[]};groups.push(g)}
+    g.rows.push(x);
+  });
+  const rows=groups.map(g=>`<div style="font-family:'Bebas Neue';font-size:18px;letter-spacing:2px;color:var(--gold);margin:16px 0 8px">📆 ${esc(g.label)} <span style="font-family:'Rajdhani';font-size:12px;letter-spacing:0;color:var(--text2)">(${g.rows.length})</span></div>`
+    +g.rows.map(x=>{
+      const link=`https://wa.me/${normalizeWhatsappAR(x.whatsapp)}?text=${encodeURIComponent(reminderMessage(x))}`;
+      return `<div class="sup-match" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
       <div>
         <div style="font-weight:700">${esc(x.playerName)}</div>
-        <div style="font-size:12px;color:var(--text2)">${esc(x.ctx)} · 📆 ${esc(x.day)} · 🕐 ${esc(x.time)}${x.court?' · 🏟️ '+esc(x.court):''} · vs ${esc(x.rival)}</div>
+        <div style="font-size:12px;color:var(--text2)">🕐 ${esc(x.time)} · ${esc(x.ctx)}${x.court?' · 🏟️ '+esc(x.court):''} · vs ${esc(x.rival)}</div>
       </div>
       <a class="btn btn-primary btn-sm" href="${link}" target="_blank" rel="noopener">📲 Avisar por WhatsApp</a>
     </div>`;
-  }).join('');
+    }).join('')).join('');
+  const notes=[];
   const missingNames=[...new Set(withoutWa.map(x=>x.playerName))];
-  const missing=missingNames.length?`<div class="card" style="padding:14px;margin-top:14px">
-    <div style="font-size:12px;color:var(--text2)">Tienen partido con horario pero no tienen WhatsApp cargado, así que no se pudo armar el link: ${esc(missingNames.join(', '))}</div>
+  if(missingNames.length)notes.push(`<b>Sin WhatsApp cargado</b> (tienen partido con horario, pero no se pudo armar el link): ${esc(missingNames.join(', '))}`);
+  const unlinked=[...new Set(skipped.filter(s=>s.reason==='sinVincular').map(s=>s.playerName).filter(Boolean))];
+  if(unlinked.length)notes.push(`<b>Sin vincular a la lista de buena fe</b> (la pareja se cargó con el nombre escrito a mano, así que no se sabe su WhatsApp; editá la pareja y elegí a los jugadores de la lista): ${esc(unlinked.join(', '))}`);
+  const noRival=[...new Set(skipped.filter(s=>s.reason==='rival').map(s=>`${s.ctx} · ${s.day} ${s.time}`))];
+  if(noRival.length)notes.push(`<b>Rival todavía sin definir</b> (se avisa cuando se sepa quién juega): ${esc(noRival.join(' | '))}`);
+  if(noSchedule)notes.push(`<b>${noSchedule} partido${noSchedule===1?'':'s'}</b> con los dos equipos definidos que todavía no tienen día y horario cargado.`);
+  const why=notes.length?`<div class="card" style="padding:14px;margin-top:16px">
+    <div style="font-weight:700;font-size:13px;margin-bottom:8px">ℹ️ Por qué no aparecen todos</div>
+    ${notes.map(n=>`<div style="font-size:12px;color:var(--text2);margin-bottom:6px;line-height:1.5">• ${n}</div>`).join('')}
   </div>`:'';
-  return intro+rows+missing;
+  const empty=!rows?`<div class="empty"><div class="ei">📲</div><p>Todavía no hay partidos listos para avisar.</p></div>`:'';
+  return intro+rows+empty+why;
 }
 async function setZoneDay(zId,day){
   const z=getZone(zId);if(!z)return;
