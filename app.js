@@ -242,6 +242,7 @@ function renderLiveBanners(){
   wrap.innerHTML=actives.map(l=>`<a class="live-banner" href="${esc(l.url)}" target="_blank" rel="noopener"><span class="live-dot"></span><span>EN VIVO${l.label?' — '+esc(l.label):''} — Mirá la transmisión</span></a>`).join('');
 }
 
+let _logoApplied=undefined; // último logoDataUrl ya aplicado, para no recrear la imagen (y volver a descargarla) en cada refresco de 8s si no cambió
 function applyVisuals(){
   if(S.bgDataUrl)document.body.style.setProperty('--court-bg',`url("${encodeURI(S.bgDataUrl)}")`);
   if(S.logoDataUrl){
@@ -249,13 +250,16 @@ function applyVisuals(){
     document.getElementById('wLogoImg').src=S.logoDataUrl;
     document.getElementById('wLogoImg').style.display='block';
   }
-  ['pHeaderLogo','sHeaderLogo'].forEach(id=>{
-    const el=document.getElementById(id);
-    if(!el)return;
-    el.textContent='';
-    if(S.logoDataUrl){const im=document.createElement('img');im.src=S.logoDataUrl;im.style.cssText='width:100%;height:100%;object-fit:contain';el.appendChild(im)}
-    else el.textContent='🎾';
-  });
+  if(S.logoDataUrl!==_logoApplied){
+    _logoApplied=S.logoDataUrl;
+    ['pHeaderLogo','sHeaderLogo'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(!el)return;
+      el.textContent='';
+      if(S.logoDataUrl){const im=document.createElement('img');im.src=S.logoDataUrl;im.style.cssText='width:100%;height:100%;object-fit:contain';el.appendChild(im)}
+      else el.textContent='🎾';
+    });
+  }
   document.getElementById('wTitle').textContent=S.name.toUpperCase();
   document.getElementById('wCategory').textContent=S.category;
   document.getElementById('wDesc').textContent=S.description;
@@ -881,11 +885,15 @@ async function setSponsorLogo(inp){const f=inp.files[0];if(!f)return;toast('Subi
 async function addSponsor(){const name=document.getElementById('spName').value.trim();if(!name&&!_spLogoUrl){toast('Ingresá nombre o logo');return}S.sponsors.push({name:name||'',logoUrl:_spLogoUrl||null});_spLogoUrl=null;await save();renderSponsors();renderAdBanners();renderSupContent();toast('Auspiciante agregado ✓')}
 async function removeSponsor(i){S.sponsors.splice(i,1);await save();renderSponsors();renderAdBanners();renderSupContent()}
 async function clearAdBanner(){S.adDataUrl=null;await save();applyVisuals();renderSupContent();toast('Banner de imagen quitado ✓')}
+let _sponsorsSig=null; // evita reconstruir los <img> de auspiciantes (y re-descargarlos) en cada refresco de 8s si la lista no cambió
 function renderSponsors(){
   const list=document.getElementById('sponsorsList'),noMsg=document.getElementById('noSponsorsMsg');
   if(!list)return;
-  if(!S.sponsors.length){if(noMsg)noMsg.style.display='';return}
+  if(!S.sponsors.length){if(noMsg)noMsg.style.display='';_sponsorsSig=null;return}
   if(noMsg)noMsg.style.display='none';
+  const sig=JSON.stringify(S.sponsors.map(sp=>[sp.logoUrl,sp.name]));
+  if(sig===_sponsorsSig)return;
+  _sponsorsSig=sig;
   list.innerHTML=S.sponsors.map(sp=>`<div style="display:flex;flex-direction:column;align-items:center;gap:4px">
     ${sp.logoUrl?`<img class="sponsor-logo" src="${esc(sp.logoUrl)}"/>`:''}
     ${sp.name?`<span class="sponsor-name">${esc(sp.name)}</span>`:''}
@@ -1076,7 +1084,7 @@ function collectReminders(){
   return{items,skipped,noSchedule};
 }
 function reminderMessage(x){
-  return `Hola ${x.firstName}! Te recordamos tu partido (${x.ctx}): ${x.day} a las ${x.time} hs${x.court?', cancha '+x.court:''}. Rival: ${x.rival}. ¡Éxitos!`;
+  return `Hola ${x.firstName}! Te recordamos tu partido (${x.ctx}): ${x.day} a las ${x.time} hs${x.court?', cancha '+x.court:''}. Rival: ${x.rival}. RECORDA ESTAR 15min ANTES DEL INICIO DEL PARTIDO. ¡Éxitos!`;
 }
 function renderSupAvisos(){
   const {items,skipped,noSchedule}=collectReminders();
